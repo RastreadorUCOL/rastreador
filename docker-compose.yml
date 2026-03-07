@@ -32,6 +32,20 @@ services:
     depends_on:
       - db
 
+  # Interfaz gráfica para gestionar MySQL
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: rastreador_phpmyadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      - db
+
 # Volúmenes para persistir datos de la BD
 volumes:
   mysql_data:
