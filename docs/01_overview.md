@@ -14,7 +14,23 @@ Para una comprensión profunda del sistema, consulte los siguientes documentos e
 ---
 
 ## Resumen Ejecutivo
-**Rastreador** es z
+**Rastreador** es una plataforma backend para rastreo de personas y vehículos en tiempo real. Permite gestionar usuarios, dispositivos GPS, geocercas (zonas geográficas), alertas y reportes. El sistema ofrece comunicación en tiempo real mediante WebSockets para visualización live de ubicaciones.
+
+### Funcionalidades Principales
+| Módulo | Descripción |
+| :--- | :--- |
+| **Autenticación** | Registro, login y gestión de sesiones con JWT. Roles: ADMIN, SUPERVISOR, CLIENT, USER. |
+| **Ubicación en Tiempo Real** | Recepción de coordenadas GPS vía WebSockets (Socket.io). Sincronización offline para dispositivos que recuperan conexión. |
+| **Geocercas** | Definición de zonas circulares o poligonales. Detección automática de entrada/salida y generación de alertas. |
+| **Alertas** | Notificaciones por batería baja, pérdida de señal, desconexión y eventos de geocercas. |
+| **Reportes** | Generación de reportes en formato PDF y Excel. |
+| **Dashboard Web** | Panel de administración para supervisores y administradores con visualización en tiempo real. |
+
+### Características Técnicas
+- **Tiempo Real**: WebSockets con salas diferenciadas (dashboard vs usuarios rastreados).
+- **Sincronización Offline**: La app móvil puede enviar ubicaciones almacenadas cuando recupera conexión.
+- **Sistema de Permisos**: Middleware de autenticación y control de roles por endpoint.
+- **Base de Datos**: MySQL con pool de conexiones.
 
 ## Stack Tecnológico
 - **Backend**: Node.js con Express.
