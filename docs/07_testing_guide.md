@@ -17,7 +17,7 @@ Invoke-RestMethod -Uri "http://localhost:3000" -Method Get
 
 ---
 
-## 2. Flujo de Autenticación
+## 2. Flujo de autenticación
 
 ### A. Registrar un usuario (Administrador)
 Crea un usuario inicial para realizar pruebas.
