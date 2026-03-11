@@ -7,8 +7,10 @@ WORKDIR /app
 # Copiar archivos de dependencias
 COPY package*.json ./
 
-# Instalar dependencias
-RUN npm install
+# Dependencias de compilación para mysql2 (node-gyp necesita python, make, g++)
+RUN apk add --no-cache python3 make g++ \
+    && npm install --production \
+    && npm cache clean --force
 
 # Copiar el resto del código
 COPY . .
