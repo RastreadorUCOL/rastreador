@@ -1,0 +1,38 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "app/src/components/userCard.jsx",
+    "app/src/components/themed-view.jsx",
+    "app/src/components/themed-text.jsx",
+    "app/src/components/sidebar.jsx",
+    "app/src/components/mapView.jsx",
+    "app/src/components/hello-wave.jsx",
+    "app/src/components/header.jsx",
+    "app/src/components/haptic-tab.jsx",
+    "app/src/components/geofenceCard.jsx",
+    "app/src/components/external-link.jsx",
+    "app/src/router/router.jsx",
+    "app/src/layouts/mainLayout.jsx",
+    "app/src/pages/users.jsx",
+    "app/src/pages/reports.jsx",
+    "app/src/pages/register.jsx",
+    "app/src/pages/recovery.jsx",
+    "app/src/pages/profile.jsx",
+    "app/src/pages/mobileView.jsx",
+    "app/src/pages/dashboard.jsx",
+    "app/src/pages/alerts.jsx",
+    "app/src/pages/login.jsx",
+    "app/src/app.jsx",
+    "app/geofences.jsx"
+  ]
+}
