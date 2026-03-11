@@ -1,5 +1,5 @@
-# Usar la imagen oficial de Node.js (Debian slim para evitar problemas con repos Alpine)
-FROM node:18-slim
+# Usar la imagen oficial de Node.js (Debian slim)
+FROM node:20-slim
 
 # Definir el directorio de trabajo
 WORKDIR /app
@@ -8,9 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Dependencias de compilación para mysql2 (node-gyp necesita python, make, g++)
-# Forzamos https en los mirrors porque algunas redes bloquean http saliente.
-RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list \
-    && apt-get update -o Acquire::ForceIPv4=true \
+RUN apt-get update -o Acquire::ForceIPv4=true \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && npm install --production \
     && npm cache clean --force \
