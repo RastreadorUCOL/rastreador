@@ -4,16 +4,9 @@ FROM node:20-slim
 # Definir el directorio de trabajo
 WORKDIR /app
 
-# Copiar archivos de dependencias
+# Copiamos package*.json y node_modules desde el host (ya ejecutaste `npm install` en la VM)
 COPY package*.json ./
-
-# Dependencias de compilación para mysql2 (node-gyp necesita python, make, g++)
-RUN apt-get update -o Acquire::ForceIPv4=true \
-    && apt-get install -y --no-install-recommends python3 make g++ \
-    && npm install --production \
-    && npm cache clean --force \
-    && apt-get purge -y --auto-remove python3 make g++ \
-    && rm -rf /var/lib/apt/lists/*
+COPY node_modules ./node_modules
 
 # Copiar el resto del código
 COPY . .
