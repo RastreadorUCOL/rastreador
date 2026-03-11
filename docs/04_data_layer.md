@@ -37,6 +37,70 @@ erDiagram
     CLIENTS }o--|| USERS : managed_by_client_admin
     
     GEOFENCES ||--o{ GEOFENCE_EVENTS : defines
+
+    CLIENTS {
+        INT id_client
+        VARCHAR nombre_empresa
+        VARCHAR contacto
+        INT id_user_admin
+        DATETIME created_at
+    }
+
+    USER_CLIENT {
+        INT id
+        INT id_user
+        INT id_client
+    }
+
+    SUPERVISOR_USER {
+        INT id
+        INT id_supervisor
+        INT id_user
+    }
+
+    GEOFENCES {
+        INT id_geofence
+        VARCHAR nombre
+        ENUM tipo
+        JSON coordenadas
+        FLOAT radio
+        INT created_by
+        DATETIME created_at
+    }
+
+    GEOFENCE_EVENTS {
+        BIGINT id_event
+        INT id_user
+        INT id_geofence
+        ENUM tipo_evento
+        DATETIME timestamp_evento
+    }
+
+    ALERTS {
+        BIGINT id_alert
+        INT id_user
+        ENUM tipo_alerta
+        TEXT descripcion
+        DATETIME timestamp_alerta
+        BOOLEAN is_read
+    }
+
+    CONSENTS {
+        INT id_consent
+        INT id_user
+        DATETIME accepted_at
+        VARCHAR ip_address
+        TEXT user_agent
+    }
+
+    SESSIONS {
+        INT id_session
+        INT id_user
+        VARCHAR token_jti
+        VARCHAR device_id
+        DATETIME login_time
+        BOOLEAN is_active
+    }
     
     LOCATIONS {
         BIGINT id_location
