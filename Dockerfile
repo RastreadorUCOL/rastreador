@@ -1,5 +1,5 @@
-# Usar la imagen oficial de Node.js
-FROM node:18-alpine
+# Usar la imagen oficial de Node.js (Debian slim para evitar problemas con repos Alpine)
+FROM node:18-slim
 
 # Definir el directorio de trabajo
 WORKDIR /app
@@ -8,9 +8,12 @@ WORKDIR /app
 COPY package*.json ./
 
 # Dependencias de compilación para mysql2 (node-gyp necesita python, make, g++)
-RUN apk add --no-cache python3 make g++ \
+RUN apt-get update \
+    && apt-get install -y python3 make g++ \
     && npm install --production \
-    && npm cache clean --force
+    && npm cache clean --force \
+    && apt-get purge -y --auto-remove python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copiar el resto del código
 COPY . .
