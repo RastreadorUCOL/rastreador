@@ -22,15 +22,21 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json()); // Para parsear el body de las peticiones a JSON
 
-// Probar conexión a la base de datos
-dbPool.getConnection()
-    .then(connection => {
-        console.log('✅ Conectado exitosamente a MySQL (Pool de conexiones)');
-        connection.release();
-    })
-    .catch(err => {
-        console.error('❌ Error conectando a MySQL:', err.message);
-    });
+// Probar conexión a la base de datos con reintentos
+const connectWithRetry = () => {
+    dbPool.getConnection()
+        .then(connection => {
+            console.log('✅ Conectado exitosamente a MySQL (Pool de conexiones)');
+            connection.release();
+        })
+        .catch(err => {
+            console.error('❌ Error conectando a MySQL:', err.message);
+            console.log('⏳ Reintentando conexión en 5 segundos...');
+            setTimeout(connectWithRetry, 5000);
+        });
+};
+
+connectWithRetry();
 
 // Hacer 'io' accesible en los controladores si necesitamos emitir algo desde una ruta REST
 app.set('io', io);
