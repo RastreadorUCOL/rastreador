@@ -54,12 +54,20 @@ const locationRoutes = require('./src/routes/location.routes');
 const geofenceRoutes = require('./src/routes/geofence.routes');
 const alertRoutes = require('./src/routes/alert.routes');
 const reportRoutes = require('./src/routes/report.routes');
+const clientRoutes = require('./src/routes/client.routes');
+const userClientRoutes = require('./src/routes/user_client.routes');
+const supervisorUserRoutes = require('./src/routes/supervisor_user.routes');
+const consentRoutes = require('./src/routes/consent.routes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/geofences', geofenceRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/clients', clientRoutes);
+app.use('/api/user-clients', userClientRoutes);
+app.use('/api/supervisor-users', supervisorUserRoutes);
+app.use('/api/consents', consentRoutes);
 
 
 // Iniciar servidor
