@@ -1,11 +1,24 @@
 import { useRouter } from "expo-router";
-import AuthFrame, { authFormStyles } from "../_components/auth-frame";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform, Alert } from "react-native";
+import AuthFrame from "../_components/auth-frame";
+import { useState } from "react";
 
 export default function Recovery() {
   const router = useRouter();
+  const [correo, setCorreo] = useState("");
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
+  const handleSubmit = () => {
+    if (!correo) {
+      const msg = "Por favor ingresa tu correo";
+      if (Platform.OS === 'web') alert(msg);
+      else Alert.alert("Campo requerido", msg);
+      return;
+    }
+
+    const successMsg = "Enlace de recuperación enviado (Demo)";
+    if (Platform.OS === 'web') alert(successMsg);
+    else Alert.alert("Enviado", successMsg);
+    
     router.push("/login");
   };
 
@@ -13,22 +26,59 @@ export default function Recovery() {
     <AuthFrame
       activeTab="recovery"
       subtitle="Recupera acceso de forma segura y vuelve al flujo de login."
-      title={"-> Recuperacion"}
+      title={"Recuperacion"}
     >
-      <form style={authFormStyles.form} onSubmit={handleSubmit}>
-        <input
-          style={authFormStyles.input}
-          type="email"
+      <View style={localStyles.form}>
+        <TextInput
+          style={localStyles.input}
           placeholder="Correo para recuperacion"
-          required
+          value={correo}
+          onChangeText={setCorreo}
+          keyboardType="email-address"
+          autoCapitalize="none"
         />
-        <button style={authFormStyles.buttonPrimary} type="submit">
-          Enviar enlace
-        </button>
-        <p style={authFormStyles.helperText}>
+        
+        <TouchableOpacity style={localStyles.buttonPrimary} onPress={handleSubmit}>
+          <Text style={localStyles.buttonText}>Enviar enlace</Text>
+        </TouchableOpacity>
+        
+        <Text style={localStyles.helperText}>
           Te enviaremos un enlace de recuperacion y volveras al login.
-        </p>
-      </form>
+        </Text>
+      </View>
     </AuthFrame>
   );
 }
+
+const localStyles = StyleSheet.create({
+  form: {
+    gap: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#c9d3e5",
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: "#ffffff",
+    color: "#111827",
+  },
+  buttonPrimary: {
+    marginTop: 10,
+    backgroundColor: "#08153a",
+    borderRadius: 14,
+    padding: 14,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  helperText: {
+    textAlign: "center",
+    fontSize: 12,
+    color: "#5a6a8d",
+    marginTop: 5,
+  },
+});

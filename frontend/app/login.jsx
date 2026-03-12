@@ -1,11 +1,10 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from "react-native";
 import AuthFrame, { authFormStyles } from "../_components/auth-frame";
 import { API_ROUTES } from "../lib/api-routes";
 import { setAuthSession } from "../lib/auth-session";
 import { api } from "../lib/fetch";
-
-const ROLES = ["Administrador", "Supervisor", "Cliente", "Usuario"];
 
 const DEFAULT_OPTIONS = {
   trackingConsent: true,
@@ -15,16 +14,19 @@ const DEFAULT_OPTIONS = {
 
 export default function Login() {
   const router = useRouter();
-  const [role, setRole] = useState("Administrador");
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setIsSubmitting(true);
+  const handleSubmit = async () => {
+    if (!correo || !password) {
+      if (Platform.OS === 'web') alert("Por favor llena todos los campos");
+      else Alert.alert("Error", "Por favor llena todos los campos");
+      return;
+    }
 
+    setIsSubmitting(true);
     try {
       const data = await api.post(API_ROUTES.auth.login, {
         correo,
@@ -35,12 +37,23 @@ export default function Login() {
         throw new Error("El backend no devolvio token de sesion.");
       }
 
-      setAuthSession(data.token, data.user || null);
+      setAuthSession(data.token, data.user || null, options);
+
+      if (options.trackingConsent) {
+        try {
+          await api.post(API_ROUTES.consents.create, {
+            id_user: data.user?.id || data.user?.id_user,
+          }, { token: data.token });
+        } catch (consentError) {
+          console.error("No se pudo registrar el consentimiento legal:", consentError);
+        }
+      }
+
       router.push("/dashboard");
     } catch (error) {
-      console.error(error);
       const message = error instanceof Error ? error.message : "No se pudo iniciar sesion";
-      alert(message);
+      if (Platform.OS === 'web') alert(message);
+      else Alert.alert("Error de acceso", message);
     } finally {
       setIsSubmitting(false);
     }
@@ -54,29 +67,25 @@ export default function Login() {
   };
 
   return (
-    <AuthFrame
-      activeTab="login"
-      title={"Iniciar sesion"}
-    >
-      <form style={authFormStyles.form} onSubmit={handleSubmit}>
-        <input
-          style={authFormStyles.input}
-          type="email"
+    <AuthFrame activeTab="login" title={"Iniciar sesion"}>
+      <View style={localStyles.form}>
+        <TextInput
+          style={localStyles.input}
           placeholder="Correo electronico"
           value={correo}
-          onChange={(e) => setCorreo(e.target.value)}
-          required
+          onChangeText={setCorreo}
+          keyboardType="email-address"
+          autoCapitalize="none"
         />
-        <input
-          style={authFormStyles.input}
-          type="password"
+        <TextInput
+          style={localStyles.input}
           placeholder="Contrasena"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
+          onChangeText={setPassword}
+          secureTextEntry
         />
 
-        <div style={styles.switchGroup}>
+        <View style={localStyles.switchGroup}>
           <SwitchRow
             checked={options.trackingConsent}
             label="Consentimiento de rastreo"
@@ -92,144 +101,114 @@ export default function Login() {
             label="Evitar suspension por bateria"
             onToggle={() => toggleOption("batteryExemption")}
           />
-        </div>
+        </View>
 
-        <button style={authFormStyles.buttonPrimary} type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Entrando..." : "Entrar al sistema"}
-        </button>
-      </form>
+        <TouchableOpacity 
+          style={[localStyles.buttonPrimary, isSubmitting && { opacity: 0.7 }]} 
+          onPress={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={localStyles.buttonText}>Entrar al sistema</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </AuthFrame>
   );
 }
 
 function SwitchRow({ label, checked, onToggle }) {
   return (
-    <label style={styles.switchRow}>
-      <span>{label}</span>
-      <button
-        aria-label={label}
-        aria-pressed={checked}
-        onClick={onToggle}
-        style={checked ? styles.switchOn : styles.switchOff}
-        type="button"
+    <View style={localStyles.switchRow}>
+      <Text style={localStyles.switchLabel}>{label}</Text>
+      <TouchableOpacity
+        onPress={onToggle}
+        style={checked ? localStyles.switchOn : localStyles.switchOff}
       >
-        <span style={checked ? styles.knobOn : styles.knobOff} />
-      </button>
-    </label>
+        <View style={checked ? localStyles.knobOn : localStyles.knobOff} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
-const styles = {
-  rolesBlock: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-    gap: "10px",
-    alignItems: "stretch",
+const localStyles = StyleSheet.create({
+  form: {
+    gap: 12,
   },
-  rolesColumn: {
-    display: "flex",
-    flexDirection: "column",
+  input: {
+    borderWidth: 1,
+    borderColor: "#c9d3e5",
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 14,
+    backgroundColor: "#ffffff",
+    color: "#111827",
   },
-  blockTitle: {
-    margin: "0 0 6px",
-    color: "#0f1f44",
-    fontSize: "clamp(16px, 1.6vw, 20px)",
+  buttonPrimary: {
+    marginTop: 10,
+    backgroundColor: "#08153a",
+    borderRadius: 14,
+    padding: 14,
+    alignItems: "center",
   },
-  rolesGrid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr",
-    gap: "6px",
-  },
-  roleButton: {
-    border: "1px solid #c7d0e1",
-    borderRadius: "999px",
-    padding: "8px 8px",
-    fontSize: "13px",
-    color: "#0f1f44",
-    background: "#ffffff",
-    cursor: "pointer",
-  },
-  activeRoleButton: {
-    border: "1px solid #040f2f",
-    borderRadius: "999px",
-    padding: "8px 8px",
-    fontSize: "13px",
+  buttonText: {
     color: "#ffffff",
-    background: "#08153a",
-    cursor: "pointer",
-  },
-  policyCard: {
-    border: "1px solid #c7d0e1",
-    borderRadius: "18px",
-    background: "#eff4fb",
-    padding: "10px 12px",
-  },
-  policyTitle: {
-    margin: "0 0 6px 0",
-    color: "#0f1f44",
-    fontSize: "clamp(15px, 1.35vw, 18px)",
-  },
-  policyList: {
-    margin: 0,
-    paddingLeft: "16px",
-    display: "grid",
-    gap: "3px",
-    color: "#23365f",
-    fontSize: "13px",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   switchGroup: {
-    border: "1px solid #cad5e6",
-    borderRadius: "18px",
-    background: "#f8faff",
-    padding: "8px 10px",
-    display: "grid",
-    gap: "4px",
+    borderWidth: 1,
+    borderColor: "#cad5e6",
+    borderRadius: 18,
+    backgroundColor: "#f8faff",
+    padding: 12,
+    gap: 10,
   },
   switchRow: {
-    display: "flex",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    fontSize: "13px",
+  },
+  switchLabel: {
+    fontSize: 14,
     color: "#0f1f44",
   },
   switchOff: {
-    width: "44px",
-    height: "24px",
-    border: "1px solid #c1cee2",
-    borderRadius: "999px",
-    background: "#d3dcea",
+    width: 44,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: "#d3dcea",
+    borderWidth: 1,
+    borderColor: "#c1cee2",
     position: "relative",
-    padding: 0,
-    cursor: "pointer",
   },
   switchOn: {
-    width: "44px",
-    height: "24px",
-    border: "1px solid #091636",
-    borderRadius: "999px",
-    background: "#0a173d",
+    width: 44,
+    height: 24,
+    borderRadius: 999,
+    backgroundColor: "#0a173d",
+    borderWidth: 1,
+    borderColor: "#091636",
     position: "relative",
-    padding: 0,
-    cursor: "pointer",
   },
   knobOff: {
-    width: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    background: "#ffffff",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#ffffff",
     position: "absolute",
-    top: "2px",
-    left: "2px",
-    boxShadow: "0 1px 3px rgba(16, 24, 40, 0.35)",
+    top: 2,
+    left: 2,
   },
   knobOn: {
-    width: "18px",
-    height: "18px",
-    borderRadius: "50%",
-    background: "#ffffff",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#ffffff",
     position: "absolute",
-    top: "2px",
-    right: "2px",
-    boxShadow: "0 1px 3px rgba(16, 24, 40, 0.35)",
+    top: 2,
+    right: 2,
   },
-};
+});

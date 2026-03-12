@@ -12,7 +12,9 @@ export const API_ROUTES = {
   },
   alerts: {
     list: absolute("/alerts"),
+    detail: (id) => absolute(`/alerts/${id}`),
     markAsRead: (id) => absolute(`/alerts/${id}/read`),
+    remove: (id) => absolute(`/alerts/${id}`),
   },
   clients: {
     list: absolute("/clients"),
@@ -29,15 +31,26 @@ export const API_ROUTES = {
   geofences: {
     create: absolute("/geofences"),
     list: absolute("/geofences"),
+    detail: (id) => absolute(`/geofences/${id}`),
+    update: (id) => absolute(`/geofences/${id}`),
+    remove: (id) => absolute(`/geofences/${id}`),
   },
   locations: {
     sync: absolute("/locations/sync"),
+    latest: (userId) => absolute(`/locations/latest/${userId}`),
+    history: (userId) => absolute(`/locations/history/${userId}`),
   },
   reports: {
     route: (userId) => absolute(`/reports/route/${userId}`),
     stats: (userId) => absolute(`/reports/stats/${userId}`),
     exportPdf: (userId) => absolute(`/reports/export/pdf/${userId}`),
     exportExcel: (userId) => absolute(`/reports/export/excel/${userId}`),
+  },
+  users: {
+    list: absolute("/users"),
+    detail: (id) => absolute(`/users/${id}`),
+    update: (id) => absolute(`/users/${id}`),
+    remove: (id) => absolute(`/users/${id}`),
   },
   userClients: {
     assign: absolute("/user-clients"),

@@ -1,32 +1,41 @@
+import { View, Text, StyleSheet } from 'react-native';
+
 export default function AlertCard({
   title = "Alerta",
   description = "Descripcion de alerta",
 }) {
   return (
-    <div style={styles.card}>
-      <h3 style={styles.title}>{title}</h3>
-      <p style={styles.desc}>{description}</p>
-    </div>
+    <View style={styles.card}>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.desc}>{description}</Text>
+    </View>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   card: {
-    background: "#ffffff",
-    border: "1px solid #d7deec",
-    borderRadius: "18px",
-    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.08)",
-    padding: "14px",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d7deec",
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+    marginBottom: 8,
   },
   title: {
-    margin: "0 0 6px 0",
     color: "#0f1f44",
-    fontSize: "16px",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 4,
   },
   desc: {
-    margin: 0,
     color: "#4d5d80",
-    fontSize: "13px",
-    lineHeight: 1.45,
+    fontSize: 13,
+    lineHeight: 18,
   },
-};
+});
+

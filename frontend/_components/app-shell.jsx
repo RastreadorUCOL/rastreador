@@ -1,296 +1,250 @@
-import { useEffect, useState } from "react";
-import { Link, usePathname } from "expo-router";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, useWindowDimensions, SafeAreaView } from "react-native";
+import { usePathname, useRouter } from "expo-router";
+import { clearAuthSession, getAuthToken, getAuthContext } from "../lib/auth-session";
+import { api } from "../lib/fetch";
+import { API_ROUTES } from "../lib/api-routes";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/users", label: "Usuarios" },
-  { href: "/geofences", label: "Geocercas" },
-  { href: "/reports", label: "Reportes" },
-  { href: "/alerts", label: "Alertas" },
-  { href: "/profile", label: "Perfil" },
-  { href: "/mobileView", label: "Vista movil" },
+  { href: "/dashboard", label: "Mapa", icon: "🗺️" },
+  { href: "/users", label: "Usuarios", icon: "👥" },
+  { href: "/geofences", label: "Cercas", icon: "⭕" },
+  { href: "/reports", label: "Reportes", icon: "📊" },
+  { href: "/alerts", label: "Alertas", icon: "⚠️" },
+  { href: "/profile", label: "Perfil", icon: "👤" },
 ];
 
 export default function AppShell({ title, subtitle, children }) {
   const pathname = usePathname();
-  const [viewportWidth, setViewportWidth] = useState(
-    typeof window === "undefined" ? 1280 : window.innerWidth
-  );
+  const router = useRouter();
+  const { user } = getAuthContext();
+  const token = getAuthToken();
+  const { width: viewportWidth } = useWindowDimensions();
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
+  const handleLogout = async () => {
+    try {
+      if (token) await api.post(API_ROUTES.auth.logout, {}, { token });
+    } catch (error) {
+      console.error("Error logout:", error);
+    } finally {
+      clearAuthSession();
+      router.replace("/login");
     }
+  };
 
-    const onResize = () => setViewportWidth(window.innerWidth);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+  const isMobile = viewportWidth < 768;
 
-  const isTablet = viewportWidth < 1120;
-  const isMobile = viewportWidth < 760;
+  const navigateTo = (href) => {
+    router.push(href);
+  };
 
   return (
-    <div style={styles.wrapper}>
-      <div
-        style={{
-          ...styles.frame,
-          gridTemplateColumns: isTablet ? "1fr" : styles.frame.gridTemplateColumns,
-        }}
-      >
-        <aside style={styles.sidebar}>
-          <div style={styles.brandBlock}>
-            <div style={styles.brandBadge}>RT</div>
-            <div>
-              <h2 style={styles.brandTitle}>Rastreador</h2>
-              <p style={styles.brandSubtitle}>Control en tiempo real</p>
-            </div>
-          </div>
+    <SafeAreaView style={styles.wrapper}>
+      <View style={isMobile ? styles.frameMobile : styles.frame}>
+        
+        {/* SIDEBAR (Desktop) */}
+        {!isMobile && (
+          <View style={styles.sidebar}>
+            <View style={styles.brandBlock}>
+              <View style={styles.brandBadge}><Text style={styles.brandBadgeText}>RT</Text></View>
+              <View>
+                <Text style={styles.brandTitle}>Rastreador</Text>
+                <Text style={styles.brandSubtitle}>Control Real-Time</Text>
+              </View>
+            </View>
 
-          <nav
-            style={{
-              ...styles.nav,
-              gridTemplateColumns: isTablet ? "repeat(2, minmax(0, 1fr))" : "1fr",
-              overflowX: isMobile ? "auto" : "visible",
-            }}
-          >
+            <ScrollView style={styles.navScroll}>
+              {NAV_ITEMS.map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <TouchableOpacity 
+                    key={item.href} 
+                    onPress={() => navigateTo(item.href)}
+                    style={active ? styles.navLinkActive : styles.navLink}
+                  >
+                    <Text style={active ? styles.navLinkTextActive : styles.navLinkText}>
+                      {item.icon}  {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButtonSidebar}>
+              <Text style={styles.logoutButtonText}>Cerrar Sesión</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* MAIN CONTENT */}
+        <View style={styles.mainPanel}>
+          <View style={styles.header}>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>{title}</Text>
+              {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
+            </View>
+            {isMobile && (
+              <TouchableOpacity onPress={handleLogout} style={styles.logoutIconMobile}>
+                <Text style={{fontSize: 20}}>🚪</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <ScrollView contentContainerStyle={styles.content}>
+            {children}
+          </ScrollView>
+        </View>
+
+        {/* BOTTOM NAV (Mobile Only) */}
+        {isMobile && (
+          <View style={styles.bottomNav}>
             {NAV_ITEMS.map((item) => {
-              const isActive = pathname === item.href;
+              const active = pathname === item.href;
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  style={{
-                    ...styles.navLink,
-                    ...(isActive ? styles.navLinkActive : null),
-                  }}
+                <TouchableOpacity 
+                  key={item.href} 
+                  onPress={() => navigateTo(item.href)}
+                  style={styles.bottomNavItem}
                 >
-                  {item.label}
-                </Link>
+                  <Text style={{fontSize: 20}}>{item.icon}</Text>
+                  <Text style={active ? styles.bottomNavTextActive : styles.bottomNavText}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
               );
             })}
-          </nav>
-
-          <div style={styles.rulesBox}>
-            <p style={styles.rulesTitle}>Reglas de acceso</p>
-            <p style={styles.rulesText}>Administrador: control total.</p>
-            <p style={styles.rulesText}>Supervisor: vista operativa.</p>
-            <p style={styles.rulesText}>Cliente: datos de su cuenta.</p>
-            <p style={styles.rulesText}>Usuario: estado propio.</p>
-          </div>
-        </aside>
-
-        <main style={styles.mainPanel}>
-          <header
-            style={{
-              ...styles.header,
-              flexDirection: isMobile ? "column" : "row",
-              alignItems: isMobile ? "flex-start" : "center",
-            }}
-          >
-            <div>
-              <h1 style={styles.headerTitle}>{title}</h1>
-              <p style={styles.headerSubtitle}>{subtitle}</p>
-            </div>
-            <div style={styles.sessionBadge}>Sesion: Administrador</div>
-          </header>
-          <section style={styles.content}>{children}</section>
-        </main>
-      </div>
-    </div>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
   );
 }
 
 export const appUi = {
   card: {
-    background: "#ffffff",
-    border: "1px solid #d7deec",
-    borderRadius: "20px",
-    boxShadow: "0 8px 20px rgba(15, 23, 42, 0.08)",
-    padding: "16px",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d7deec",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 12,
   },
   sectionTitle: {
-    margin: "0 0 6px 0",
+    marginBottom: 4,
     color: "#0f1f44",
-    fontSize: "18px",
+    fontSize: 18,
+    fontWeight: "bold",
   },
   sectionDescription: {
-    margin: 0,
     color: "#5c6d8f",
-    fontSize: "13px",
-  },
-  primaryButton: {
-    border: "none",
-    borderRadius: "12px",
-    padding: "10px 14px",
-    background: "#091636",
-    color: "#ffffff",
-    fontWeight: 700,
-    fontSize: "13px",
-    cursor: "pointer",
-  },
-  secondaryButton: {
-    border: "1px solid #c6d0e3",
-    borderRadius: "12px",
-    padding: "10px 14px",
-    background: "#ffffff",
-    color: "#0f1f44",
-    fontWeight: 600,
-    fontSize: "13px",
-    cursor: "pointer",
-  },
-  input: {
-    border: "1px solid #c7d1e4",
-    borderRadius: "12px",
-    padding: "10px 12px",
-    fontSize: "14px",
-    color: "#0f172a",
-    background: "#ffffff",
-    outline: "none",
+    fontSize: 13,
   },
 };
 
-const styles = {
+const styles = StyleSheet.create({
   wrapper: {
-    height: "100vh",
-    minHeight: "100vh",
-    width: "100%",
-    background:
-      "radial-gradient(circle at top, #eef2f9 0%, #d9e0eb 50%, #ccd4e2 100%)",
-    padding: "8px",
-    boxSizing: "border-box",
-    fontFamily: "Segoe UI, system-ui, sans-serif",
+    flex: 1,
+    backgroundColor: "#ccd4e2",
   },
   frame: {
-    height: "100%",
-    maxWidth: "1840px",
-    margin: "0 auto",
-    display: "grid",
-    gridTemplateColumns: "280px minmax(0, 1fr)",
-    gap: "12px",
+    flex: 1,
+    flexDirection: "row",
+    padding: 10,
+    gap: 10,
+  },
+  frameMobile: {
+    flex: 1,
+    flexDirection: "column",
   },
   sidebar: {
-    background: "#f7f9fc",
-    border: "1px solid #d3dbe8",
-    borderRadius: "28px",
-    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.1)",
-    padding: "16px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "14px",
-    minHeight: 0,
-    overflowY: "auto",
+    width: 260,
+    backgroundColor: "#f7f9fc",
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#d3dbe8",
   },
   brandBlock: {
-    background: "#091636",
-    borderRadius: "20px",
-    padding: "14px",
-    display: "flex",
+    backgroundColor: "#091636",
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: "row",
     alignItems: "center",
-    gap: "10px",
-    color: "#ffffff",
+    gap: 10,
+    marginBottom: 20,
   },
   brandBadge: {
-    width: "40px",
-    height: "40px",
-    borderRadius: "14px",
-    border: "1px solid #2e4477",
-    background: "#122654",
-    display: "grid",
-    placeItems: "center",
-    fontWeight: 800,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#122654",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#2e4477",
   },
-  brandTitle: {
-    margin: 0,
-    fontSize: "18px",
-  },
-  brandSubtitle: {
-    margin: "2px 0 0 0",
-    color: "#d2ddfb",
-    fontSize: "12px",
-  },
-  nav: {
-    display: "grid",
-    gap: "6px",
-  },
+  brandBadgeText: { color: "#fff", fontWeight: "800" },
+  brandTitle: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  brandSubtitle: { color: "#d2ddfb", fontSize: 11 },
+  navScroll: { flex: 1 },
   navLink: {
-    textDecoration: "none",
-    borderRadius: "12px",
-    padding: "10px 12px",
-    fontWeight: 600,
-    fontSize: "14px",
-    color: "#132754",
-    border: "1px solid transparent",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 4,
   },
   navLinkActive: {
-    background: "#091636",
-    color: "#ffffff",
-    border: "1px solid #1b356f",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+    backgroundColor: "#091636",
   },
-  rulesBox: {
-    marginTop: "auto",
-    borderRadius: "18px",
-    border: "1px dashed #b8c5dd",
-    background: "#edf2fb",
-    padding: "12px",
-    color: "#34476f",
+  navLinkText: {
+    color: "#132754",
+    fontWeight: "600",
+    fontSize: 14,
   },
-  rulesTitle: {
-    margin: 0,
-    fontWeight: 700,
-    fontSize: "13px",
-    color: "#1a2f5f",
-  },
-  rulesText: {
-    margin: "6px 0 0 0",
-    fontSize: "12px",
+  navLinkTextActive: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
   },
   mainPanel: {
-    background: "#f7f9fc",
-    border: "1px solid #d3dbe8",
-    borderRadius: "28px",
-    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.1)",
-    minHeight: 0,
-    display: "flex",
-    flexDirection: "column",
+    flex: 1,
+    backgroundColor: "#f7f9fc",
+    borderRadius: Platform.OS === 'web' ? 24 : 0,
+    borderWidth: Platform.OS === 'web' ? 1 : 0,
+    borderColor: "#d3dbe8",
     overflow: "hidden",
   },
   header: {
-    borderBottom: "1px solid #d7deec",
-    padding: "16px 18px",
-    display: "flex",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#d7deec",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "12px",
   },
-  headerTitle: {
-    margin: 0,
-    color: "#0f1f44",
-    fontSize: "26px",
+  headerTitle: { fontSize: 22, fontWeight: "bold", color: "#0f1f44" },
+  headerSubtitle: { fontSize: 13, color: "#5c6d8f", marginTop: 2 },
+  content: { padding: 16 },
+  bottomNav: {
+    flexDirection: "row",
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#d7deec",
+    paddingBottom: 10,
+    paddingTop: 10,
+    justifyContent: "space-around",
   },
-  headerSubtitle: {
-    margin: "4px 0 0 0",
-    color: "#5c6d8f",
-    fontSize: "14px",
+  bottomNavItem: { alignItems: "center", flex: 1 },
+  bottomNavText: { fontSize: 10, color: "#5c6d8f", marginTop: 4 },
+  bottomNavTextActive: { fontSize: 10, color: "#091636", fontWeight: "bold", marginTop: 4 },
+  logoutButtonSidebar: {
+    marginTop: 10,
+    padding: 12,
+    backgroundColor: "#fee2e2",
+    borderRadius: 12,
+    alignItems: "center",
   },
-  sessionBadge: {
-    border: "1px solid #c7d1e4",
-    borderRadius: "999px",
-    background: "#edf2fb",
-    color: "#1a2f5f",
-    padding: "8px 12px",
-    fontSize: "12px",
-    fontWeight: 700,
-    whiteSpace: "nowrap",
-  },
-  content: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: "auto",
-    padding: "14px",
-    display: "grid",
-    gap: "12px",
-    scrollbarWidth: "thin",
-  },
-};
+  logoutButtonText: { color: "#b91c1c", fontWeight: "bold", fontSize: 13 },
+  logoutIconMobile: { padding: 8 },
+});

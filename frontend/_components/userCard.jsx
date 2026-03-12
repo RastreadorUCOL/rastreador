@@ -1,63 +1,91 @@
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+
 export default function UserCard({
+  id,
   name = "Usuario",
   role = "Rol",
   status = "Activo",
+  onDelete,
 }) {
   return (
-    <div style={styles.card}>
-      <h3 style={styles.name}>{name}</h3>
-      <p style={styles.text}>Rol: {role}</p>
-      <p style={styles.text}>Estado: {status}</p>
-      <div style={styles.actions}>
-        <button style={styles.button}>Ver detalle</button>
-        <button style={styles.buttonSecondary}>Editar</button>
-      </div>
-    </div>
+    <View style={styles.card}>
+      <Text style={styles.name}>{name}</Text>
+      <Text style={styles.text}>Rol: {role}</Text>
+      <Text style={styles.text}>Estado: {status}</Text>
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.button}>
+          <Text style={styles.buttonText}>Detalle</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonSecondary}>
+          <Text style={styles.buttonSecondaryText}>Editar</Text>
+        </TouchableOpacity>
+        {onDelete && (
+          <TouchableOpacity 
+            style={styles.buttonSecondary} 
+            onPress={() => onDelete(id)}
+          >
+            <Text style={[styles.buttonSecondaryText, { color: "#e11d48" }]}>Eliminar</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
   card: {
-    background: "#ffffff",
-    border: "1px solid #d7deec",
-    borderRadius: "18px",
-    boxShadow: "0 8px 18px rgba(15, 23, 42, 0.08)",
-    padding: "14px",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#d7deec",
+    borderRadius: 18,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+    marginBottom: 8,
   },
   name: {
-    margin: "0 0 8px 0",
     color: "#0f1f44",
-    fontSize: "16px",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 8,
   },
   text: {
-    margin: "4px 0",
     color: "#4d5d80",
-    fontSize: "13px",
+    fontSize: 13,
+    marginVertical: 2,
   },
   actions: {
-    display: "flex",
-    gap: "8px",
-    marginTop: "12px",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
     flexWrap: "wrap",
   },
   button: {
-    border: "none",
-    borderRadius: "10px",
-    padding: "8px 12px",
-    background: "#091636",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#091636",
+  },
+  buttonText: {
     color: "#ffffff",
-    fontWeight: 700,
-    fontSize: "12px",
-    cursor: "pointer",
+    fontWeight: "700",
+    fontSize: 12,
   },
   buttonSecondary: {
-    border: "1px solid #c7d1e4",
-    borderRadius: "10px",
-    padding: "8px 12px",
-    background: "#ffffff",
-    color: "#132754",
-    fontWeight: 600,
-    fontSize: "12px",
-    cursor: "pointer",
+    borderWidth: 1,
+    borderColor: "#c7d1e4",
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
   },
-};
+  buttonSecondaryText: {
+    color: "#132754",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+});
+

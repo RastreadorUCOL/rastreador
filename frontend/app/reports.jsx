@@ -1,18 +1,15 @@
 import { useMemo, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform, Linking } from "react-native";
 import AppShell, { appUi } from "../_components/app-shell";
 import { API_ROUTES } from "../lib/api-routes";
 import { getAuthContext } from "../lib/auth-session";
 import { api } from "../lib/fetch";
 
-function todayIsoDate() {
-  const now = new Date();
-  return now.toISOString().slice(0, 10);
-}
-
+function todayIsoDate() { return new Date().toISOString().slice(0, 10); }
 function daysAgoIsoDate(days) {
-  const now = new Date();
-  now.setDate(now.getDate() - days);
-  return now.toISOString().slice(0, 10);
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function Reports() {
@@ -27,232 +24,108 @@ export default function Reports() {
 
   const canRequest = Boolean(auth.token && userId && startDate && endDate);
 
-  const summary = useMemo(() => {
-    const averageSpeed = stats?.velocidad_promedio ?? "0.00";
-    const stoppedMinutes = stats?.tiempo_total_parado_minutos ?? "0.00";
-    const stopsCount = Array.isArray(stats?.paradas) ? stats.paradas.length : 0;
-
-    return {
-      routePoints: routeRows.length,
-      averageSpeed,
-      stoppedMinutes,
-      stopsCount,
-    };
-  }, [routeRows, stats]);
-
-  const buildReportQuery = () => ({
-    startDate,
-    endDate,
-  });
+  const summary = useMemo(() => ({
+    routePoints: routeRows.length,
+    averageSpeed: stats?.velocidad_promedio ?? "0.00",
+    stoppedMinutes: stats?.tiempo_total_parado_minutos ?? "0.00",
+    stopsCount: Array.isArray(stats?.paradas) ? stats.paradas.length : 0,
+  }), [routeRows, stats]);
 
   const runReports = async () => {
-    if (!canRequest) {
-      setError("Completa userId, fechas y una sesion valida para consultar reportes.");
-      return;
-    }
-
+    if (!canRequest) return;
     setLoading(true);
     setError("");
-
     try {
-      const query = buildReportQuery();
-
+      const query = { startDate, endDate };
       const [routeData, statsData] = await Promise.all([
-        api.get(API_ROUTES.reports.route(userId), {
-          token: auth.token,
-          query,
-        }),
-        api.get(API_ROUTES.reports.stats(userId), {
-          token: auth.token,
-          query,
-        }),
+        api.get(API_ROUTES.reports.route(userId), { token: auth.token, query }),
+        api.get(API_ROUTES.reports.stats(userId), { token: auth.token, query }),
       ]);
-
       setRouteRows(Array.isArray(routeData) ? routeData : []);
-      setStats(statsData && typeof statsData === "object" ? statsData : null);
-    } catch (requestError) {
-      setRouteRows([]);
-      setStats(null);
-      setError(requestError?.message || "No se pudieron generar los reportes.");
-    } finally {
-      setLoading(false);
-    }
+      setStats(statsData || null);
+    } catch (err) {
+      setError("Error al generar reportes.");
+    } finally { setLoading(false); }
   };
 
   const downloadReport = async (format) => {
-    if (!canRequest) {
-      setError("Completa userId, fechas y una sesion valida antes de exportar.");
-      return;
-    }
-
-    const endpoint =
-      format === "pdf"
-        ? API_ROUTES.reports.exportPdf(userId)
-        : API_ROUTES.reports.exportExcel(userId);
-
-    const queryParams = new URLSearchParams(buildReportQuery()).toString();
-    const url = `${endpoint}?${queryParams}`;
-
-    try {
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${auth.token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`No se pudo exportar ${format.toUpperCase()}.`);
-      }
-
-      const blob = await response.blob();
-      const downloadUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download =
-        format === "pdf" ? `reporte_${userId}.pdf` : `reporte_${userId}.xlsx`;
-
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(downloadUrl);
-    } catch (requestError) {
-      setError(requestError?.message || "No se pudo exportar el reporte.");
+    const endpoint = format === "pdf" ? API_ROUTES.reports.exportPdf(userId) : API_ROUTES.reports.exportExcel(userId);
+    const url = `${endpoint}?startDate=${startDate}&endDate=${endDate}`;
+    
+    if (Platform.OS === 'web') {
+      window.open(url, '_blank');
+    } else {
+      Linking.openURL(url).catch(err => Alert.alert("Error", "No se pudo abrir el enlace de descarga."));
     }
   };
 
   return (
-    <AppShell
-      subtitle="Rutas, tiempos, velocidad, historial y exportaciones."
-      title="Reportes"
-    >
-      <div style={styles.layout}>
-        <div style={styles.mainGrid}>
-          <div style={{ ...appUi.card, ...styles.reportCard }}>
-            <h3 style={styles.reportTitle}>Ruta recorrida</h3>
-            <p style={styles.reportText}>Puntos cargados: {loading ? "..." : summary.routePoints}</p>
-            <button style={appUi.primaryButton} type="button" onClick={runReports}>
-              Generar
-            </button>
-          </div>
-
-          <div style={{ ...appUi.card, ...styles.reportCard }}>
-            <h3 style={styles.reportTitle}>Velocidad promedio</h3>
-            <p style={styles.reportText}>
-              {loading ? "Calculando..." : `${summary.averageSpeed} km/h`}
-            </p>
-            <button style={appUi.primaryButton} type="button" onClick={runReports}>
-              Actualizar
-            </button>
-          </div>
-
-          <div style={{ ...appUi.card, ...styles.reportCard }}>
-            <h3 style={styles.reportTitle}>Tiempos de parada</h3>
-            <p style={styles.reportText}>
-              {loading ? "Calculando..." : `${summary.stoppedMinutes} min`}
-            </p>
-            <p style={styles.reportText}>Paradas detectadas: {summary.stopsCount}</p>
-          </div>
-
-          <div style={{ ...appUi.card, ...styles.reportCard }}>
-            <h3 style={styles.reportTitle}>Exportaciones</h3>
-            <div style={styles.actions}>
-              <button
-                style={appUi.secondaryButton}
-                type="button"
-                onClick={() => downloadReport("pdf")}
-              >
-                Exportar PDF
-              </button>
-              <button
-                style={appUi.secondaryButton}
-                type="button"
-                onClick={() => downloadReport("excel")}
-              >
-                Exportar Excel
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ ...appUi.card, ...styles.filters }}>
-          <h3 style={appUi.sectionTitle}>Filtros</h3>
-          <input
-            style={appUi.input}
-            type="number"
-            placeholder="User ID"
-            value={userId}
-            onChange={(event) => setUserId(event.target.value)}
+    <AppShell subtitle="Análisis de rutas y tiempos." title="Reportes">
+      <View style={styles.container}>
+        {/* FILTROS */}
+        <View style={appUi.card}>
+          <Text style={appUi.sectionTitle}>Filtros</Text>
+          <TextInput 
+            style={styles.input} 
+            placeholder="User ID" 
+            value={userId} 
+            onChangeText={setUserId}
+            keyboardType="numeric"
           />
-          <input
-            style={appUi.input}
-            type="date"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
-          />
-          <input
-            style={appUi.input}
-            type="date"
-            value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
-          />
-          <button style={appUi.primaryButton} type="button" onClick={runReports}>
-            Aplicar filtros
-          </button>
-          {!auth.token ? (
-            <p style={styles.helpText}>No hay token de sesion para consultar endpoints protegidos.</p>
-          ) : null}
-          {error ? <p style={styles.errorText}>{error}</p> : null}
-        </div>
-      </div>
+          <View style={styles.row}>
+            <TextInput style={[styles.input, {flex: 1}]} placeholder="Inicio (YYYY-MM-DD)" value={startDate} onChangeText={setStartDate} />
+            <TextInput style={[styles.input, {flex: 1}]} placeholder="Fin (YYYY-MM-DD)" value={endDate} onChangeText={setEndDate} />
+          </View>
+          <TouchableOpacity style={styles.primaryBtn} onPress={runReports}>
+            <Text style={styles.primaryBtnText}>Generar Reporte</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* RESUMEN */}
+        <View style={styles.grid}>
+          <ReportCard title="Puntos de Ruta" value={summary.routePoints} label="coordenadas" />
+          <ReportCard title="Vel. Promedio" value={`${summary.averageSpeed} km/h`} label="velocidad" />
+          <ReportCard title="Tiempo Parado" value={`${summary.stoppedMinutes} min`} label={`${summary.stopsCount} paradas`} />
+        </View>
+
+        {/* EXPORTAR */}
+        <View style={appUi.card}>
+          <Text style={appUi.sectionTitle}>Exportaciones</Text>
+          <View style={styles.row}>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => downloadReport("pdf")}>
+              <Text style={styles.secondaryBtnText}>PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => downloadReport("excel")}>
+              <Text style={styles.secondaryBtnText}>Excel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
     </AppShell>
   );
 }
 
-const styles = {
-  layout: {
-    display: "grid",
-    gridTemplateColumns: "minmax(0, 2fr) minmax(260px, 1fr)",
-    gap: "10px",
-  },
-  mainGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-    gap: "10px",
-  },
-  reportCard: {
-    display: "grid",
-    gap: "10px",
-    alignContent: "start",
-  },
-  reportTitle: {
-    margin: 0,
-    color: "#0f1f44",
-    fontSize: "16px",
-  },
-  reportText: {
-    margin: 0,
-    color: "#5c6d8f",
-    fontSize: "13px",
-  },
-  actions: {
-    display: "flex",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-  filters: {
-    display: "grid",
-    gap: "8px",
-    alignContent: "start",
-  },
-  helpText: {
-    margin: 0,
-    color: "#5c6d8f",
-    fontSize: "12px",
-  },
-  errorText: {
-    margin: 0,
-    color: "#6e1f1f",
-    fontSize: "12px",
-  },
-};
+function ReportCard({ title, value, label }) {
+  return (
+    <View style={[appUi.card, { flex: 1, minWidth: '45%' }]}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      <Text style={styles.cardValue}>{value}</Text>
+      <Text style={styles.cardLabel}>{label}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { gap: 10, paddingBottom: 30 },
+  input: { borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 12, padding: 10, backgroundColor: "#fff", marginBottom: 10 },
+  row: { flexDirection: "row", gap: 10 },
+  primaryBtn: { backgroundColor: "#091636", padding: 14, borderRadius: 12, alignItems: "center" },
+  primaryBtnText: { color: "#fff", fontWeight: "bold" },
+  secondaryBtn: { flex: 1, borderWidth: 1, borderColor: "#091636", padding: 12, borderRadius: 12, alignItems: "center" },
+  secondaryBtnText: { color: "#091636", fontWeight: "bold" },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  cardTitle: { fontSize: 12, color: "#5c6d8f" },
+  cardValue: { fontSize: 20, fontWeight: "bold", color: "#091636", marginVertical: 4 },
+  cardLabel: { fontSize: 11, color: "#64748b" },
+});
+
