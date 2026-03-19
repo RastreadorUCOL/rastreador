@@ -1,4 +1,4 @@
-const DEFAULT_API_BASE_URL = "https://pruebarastreador-production.up.railway.app/api";
+const DEFAULT_API_BASE_URL = "http://localhost:3000/api";
 const RAW_API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
 const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, "");
 
