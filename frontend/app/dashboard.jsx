@@ -36,9 +36,15 @@ export default function Dashboard() {
   const [geofences, setGeofences] = useState([]);
   
   const token = getAuthToken();
-  const { user } = getAuthContext();
+  const { user, role } = getAuthContext();
   const { currentMetrics, lastSync } = useLocationTracker();
   const [activeLocations, setActiveLocations] = useState([]);
+
+  const normalizedRole = useMemo(
+    () => String(role || user?.rol || "").toUpperCase(),
+    [role, user?.rol]
+  );
+  const isAdminOrSup = normalizedRole === "ADMIN" || normalizedRole === "SUPERVISOR";
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -52,17 +58,18 @@ export default function Dashboard() {
       }
 
       try {
-        const isAdminOrSup = user?.rol === "Administrador" || user?.rol === "Supervisor";
-        
-        const [alertsData, geofencesData, locationsData] = await Promise.all([
-          api.get(API_ROUTES.alerts.list, { token, query: { limit: 5, offset: 0 } }),
-          api.get(API_ROUTES.geofences.list, { token }),
-          isAdminOrSup ? api.get(API_ROUTES.locations.list, { token, query: { latest: 1 } }) : Promise.resolve([])
+        const [alertsData, geofencesData] = await Promise.all([
+          isAdminOrSup
+            ? api.get(API_ROUTES.alerts.list, { token, query: { limit: 5, offset: 0 } })
+            : Promise.resolve([]),
+          isAdminOrSup
+            ? api.get(API_ROUTES.geofences.list, { token })
+            : Promise.resolve([]),
         ]);
 
         setAlerts(Array.isArray(alertsData) ? alertsData : []);
         setGeofences(Array.isArray(geofencesData) ? geofencesData : []);
-        setActiveLocations(Array.isArray(locationsData) ? locationsData : []);
+        setActiveLocations([]);
       } catch (requestError) {
         setError("Error al cargar datos del dashboard.");
       } finally {
@@ -73,7 +80,7 @@ export default function Dashboard() {
     loadDashboardData();
     const interval = setInterval(loadDashboardData, 30000);
     return () => clearInterval(interval);
-  }, [token, user?.rol]);
+  }, [token, isAdminOrSup]);
 
   const recentAlerts = alerts.slice(0, 3);
 
@@ -101,14 +108,14 @@ export default function Dashboard() {
         <View style={styles.sectionHeader}>
           <Text style={appUi.sectionTitle}>Mapa interactivo</Text>
           <Text style={appUi.sectionDescription}>
-            Ubicación de {user?.rol === "Administrador" ? "dispositivos" : "tu dispositivo"}
+            Ubicación de {isAdminOrSup ? "dispositivos" : "tu dispositivo"}
           </Text>
         </View>
         <MapView markers={activeLocations} />
       </View>
 
       {/* DISPOSITIVOS LIST (Solo Admin) */}
-      {(user?.rol === "Administrador" || user?.rol === "Supervisor") && activeLocations.length > 0 && (
+      {isAdminOrSup && activeLocations.length > 0 && (
         <View style={appUi.card}>
           <Text style={appUi.sectionTitle}>Dispositivos Activos</Text>
           {activeLocations.map((loc, idx) => (
