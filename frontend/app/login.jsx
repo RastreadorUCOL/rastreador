@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from "react-native";
-import AuthFrame, { authFormStyles } from "../_components/auth-frame";
+import AuthFrame from "../_components/auth-frame";
 import { API_ROUTES } from "../lib/api-routes";
 import { setAuthSession } from "../lib/auth-session";
 import { api } from "../lib/fetch";
@@ -18,23 +18,41 @@ export default function Login() {
   const [correo, setCorreo] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [focusedInput, setFocusedInput] = useState(null);
+
+  const validate = () => {
+    let newErrors = {};
+
+    if (!correo.trim()) {
+      newErrors.correo = "Este campo es obligatorio";
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+      if (!emailRegex.test(correo)) {
+        newErrors.correo = "Ingresa un correo electrónico válido (ej. usuario@ucol.mx)";
+      }
+    }
+
+    if (!password) {
+      newErrors.password = "Este campo es obligatorio";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = async () => {
-    if (!correo || !password) {
-      if (Platform.OS === 'web') alert("Por favor llena todos los campos");
-      else Alert.alert("Error", "Por favor llena todos los campos");
-      return;
-    }
+    if (!validate()) return;
 
     setIsSubmitting(true);
     try {
       const data = await api.post(API_ROUTES.auth.login, {
-        correo,
-        password,
+        correo: correo.trim(),
+        password: password.trim(),
       });
 
       if (!data?.token) {
-        throw new Error("El backend no devolvio token de sesion.");
+        throw new Error("El backend no devolvió token de sesión.");
       }
 
       setAuthSession(data.token, data.user || null, options);
@@ -51,7 +69,7 @@ export default function Login() {
 
       router.push("/dashboard");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo iniciar sesion";
+      const message = error instanceof Error ? error.message : "No se pudo iniciar sesión";
       if (Platform.OS === 'web') alert(message);
       else Alert.alert("Error de acceso", message);
     } finally {
@@ -66,24 +84,51 @@ export default function Login() {
     }));
   };
 
+  const getInputStyle = (fieldName) => [
+    localStyles.input,
+    focusedInput === fieldName && localStyles.inputFocused,
+    errors[fieldName] && localStyles.inputError,
+    isSubmitting && localStyles.inputDisabled
+  ];
+
   return (
-    <AuthFrame activeTab="login" title={"Iniciar sesion"}>
+    <AuthFrame activeTab="login" title={"Iniciar sesión"}>
       <View style={localStyles.form}>
-        <TextInput
-          style={localStyles.input}
-          placeholder="Correo electronico"
-          value={correo}
-          onChangeText={setCorreo}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={localStyles.input}
-          placeholder="Contrasena"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        
+        <View style={localStyles.inputContainer}>
+          <Text style={localStyles.label}>Correo electrónico *</Text>
+          <TextInput
+            style={getInputStyle("correo")}
+            value={correo}
+            onChangeText={(val) => {
+              setCorreo(val);
+              if (errors.correo) setErrors({ ...errors, correo: null });
+            }}
+            onFocus={() => setFocusedInput("correo")}
+            onBlur={() => setFocusedInput(null)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={!isSubmitting}
+          />
+          {errors.correo && <Text style={localStyles.errorText}>{errors.correo}</Text>}
+        </View>
+
+        <View style={localStyles.inputContainer}>
+          <Text style={localStyles.label}>Contraseña *</Text>
+          <TextInput
+            style={getInputStyle("password")}
+            value={password}
+            onChangeText={(val) => {
+              setPassword(val);
+              if (errors.password) setErrors({ ...errors, password: null });
+            }}
+            onFocus={() => setFocusedInput("password")}
+            onBlur={() => setFocusedInput(null)}
+            secureTextEntry
+            editable={!isSubmitting}
+          />
+          {errors.password && <Text style={localStyles.errorText}>{errors.password}</Text>}
+        </View>
 
         <View style={localStyles.switchGroup}>
           <SwitchRow
@@ -93,12 +138,12 @@ export default function Login() {
           />
           <SwitchRow
             checked={options.backgroundLocation}
-            label="Ubicacion en segundo plano"
+            label="Ubicación en segundo plano"
             onToggle={() => toggleOption("backgroundLocation")}
           />
           <SwitchRow
             checked={options.batteryExemption}
-            label="Evitar suspension por bateria"
+            label="Evitar suspensión por batería"
             onToggle={() => toggleOption("batteryExemption")}
           />
         </View>
@@ -137,6 +182,15 @@ const localStyles = StyleSheet.create({
   form: {
     gap: 12,
   },
+  inputContainer: {
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 14,
+    color: "#4b5563",
+    marginBottom: 6,
+    fontWeight: "600",
+  },
   input: {
     borderWidth: 1,
     borderColor: "#c9d3e5",
@@ -145,6 +199,21 @@ const localStyles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: "#ffffff",
     color: "#111827",
+  },
+  inputFocused: {
+    borderColor: "#08153a",
+  },
+  inputError: {
+    borderColor: "#e11d48",
+  },
+  inputDisabled: {
+    backgroundColor: "#f3f4f6",
+    opacity: 0.7,
+  },
+  errorText: {
+    color: "#e11d48",
+    fontSize: 12,
+    marginTop: 4,
   },
   buttonPrimary: {
     marginTop: 10,
@@ -165,6 +234,7 @@ const localStyles = StyleSheet.create({
     backgroundColor: "#f8faff",
     padding: 12,
     gap: 10,
+    marginTop: 8,
   },
   switchRow: {
     flexDirection: "row",

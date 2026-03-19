@@ -1,0 +1,6 @@
+
+> rastreador@1.0.0 start
+> node index.js
+
+🚀 Servidor escuchando en http://localhost:3000
+✅ Conectado exitosamente a MySQL (Pool de conexiones)
