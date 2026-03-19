@@ -20,14 +20,22 @@ export default function Register() {
     let newErrors = {};
     
     if (!nombre.trim()) newErrors.nombre = "Este campo es obligatorio";
-    if (!telefono.trim()) newErrors.telefono = "Este campo es obligatorio";
+    
+    if (!telefono.trim()) {
+      newErrors.telefono = "Este campo es obligatorio";
+    } else {
+      const phoneRegex = /^\+?[0-9\s\-()]{7,15}$/;
+      if (!phoneRegex.test(telefono)) {
+        newErrors.telefono = "Ingresa un número telefónico válido (ej. +52 312 000 0000)";
+      }
+    }
 
     if (!correo.trim()) {
       newErrors.correo = "Este campo es obligatorio";
     } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
       if (!emailRegex.test(correo)) {
-        newErrors.correo = "Ingresa un correo electrónico válido";
+        newErrors.correo = "Ingresa un correo electrónico válido (ej. usuario@ucol.mx)";
       }
     }
 
