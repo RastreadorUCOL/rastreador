@@ -6,6 +6,7 @@ import { useState } from "react";
 export default function Recovery() {
   const router = useRouter();
   const [correo, setCorreo] = useState("");
+  const [focusedInput, setFocusedInput] = useState(null);
 
   const handleSubmit = () => {
     if (!correo) {
@@ -29,14 +30,21 @@ export default function Recovery() {
       title={"Recuperacion"}
     >
       <View style={localStyles.form}>
-        <TextInput
-          style={localStyles.input}
-          placeholder="Correo para recuperacion"
-          value={correo}
-          onChangeText={setCorreo}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
+        <View style={localStyles.inputContainer}>
+          <Text style={localStyles.label}>Correo electrónico *</Text>
+          <TextInput
+            style={[
+              localStyles.input,
+              focusedInput === "correo" && localStyles.inputFocused
+            ]}
+            value={correo}
+            onChangeText={setCorreo}
+            onFocus={() => setFocusedInput("correo")}
+            onBlur={() => setFocusedInput(null)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        </View>
         
         <TouchableOpacity style={localStyles.buttonPrimary} onPress={handleSubmit}>
           <Text style={localStyles.buttonText}>Enviar enlace</Text>
@@ -62,6 +70,18 @@ const localStyles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: "#ffffff",
     color: "#111827",
+  },
+  inputFocused: {
+    borderColor: "#08153a",
+  },
+  inputContainer: {
+    marginBottom: 4,
+  },
+  label: {
+    fontSize: 14,
+    color: "#4b5563",
+    marginBottom: 6,
+    fontWeight: "600",
   },
   buttonPrimary: {
     marginTop: 10,

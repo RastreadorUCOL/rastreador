@@ -4,6 +4,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import AuthFrame from "../_components/auth-frame";
 import { API_ROUTES } from "../lib/api-routes";
 import { api } from "../lib/fetch";
+import { Ionicons } from "@expo/vector-icons";
 
 export default function Register() {
   const router = useRouter();
@@ -11,6 +12,7 @@ export default function Register() {
   const [correo, setCorreo] = useState("");
   const [telefono, setTelefono] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   
   const [errors, setErrors] = useState({});
   const [focusedInput, setFocusedInput] = useState(null);
@@ -146,18 +148,30 @@ export default function Register() {
 
         <View style={localStyles.inputContainer}>
           <Text style={localStyles.label}>Contraseña *</Text>
-          <TextInput
-            style={getInputStyle("password")}
-            value={password}
-            onChangeText={(val) => {
-              setPassword(val);
-              if (errors.password) setErrors({ ...errors, password: null });
-            }}
-            onFocus={() => setFocusedInput("password")}
-            onBlur={() => setFocusedInput(null)}
-            secureTextEntry
-            editable={!isSubmitting}
-          />
+          <View style={localStyles.passwordContainer}>
+            <TextInput
+              style={[getInputStyle("password"), localStyles.passwordInput]}
+              value={password}
+              onChangeText={(val) => {
+                setPassword(val);
+                if (errors.password) setErrors({ ...errors, password: null });
+              }}
+              onFocus={() => setFocusedInput("password")}
+              onBlur={() => setFocusedInput(null)}
+              secureTextEntry={!showPassword}
+              editable={!isSubmitting}
+            />
+            <TouchableOpacity 
+              style={localStyles.eyeButton} 
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Ionicons 
+                name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                size={20} 
+                color="#5a6a8d" 
+              />
+            </TouchableOpacity>
+          </View>
           {errors.password && <Text style={localStyles.errorText}>{errors.password}</Text>}
         </View>
 
@@ -212,6 +226,20 @@ const localStyles = StyleSheet.create({
   inputDisabled: {
     backgroundColor: "#f3f4f6",
     opacity: 0.7,
+  },
+  passwordContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passwordInput: {
+    flex: 1,
+    paddingRight: 45, // Espacio para el ojo
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 12,
+    height: "100%",
+    justifyContent: "center",
   },
   errorText: {
     color: "#e11d48",
