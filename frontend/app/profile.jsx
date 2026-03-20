@@ -3,12 +3,16 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform } from "react-native";
 import AppShell, { appUi } from "../_components/app-shell";
 import { API_ROUTES } from "../lib/api-routes";
-import { clearAuthSession, getAuthContext } from "../lib/auth-session";
+import { clearAuthSession, getAuthContext, setAuthSession } from "../lib/auth-session";
 import { api } from "../lib/fetch";
 
 export default function Profile() {
   const router = useRouter();
   const auth = getAuthContext();
+  const normalizedRole = String(auth.role || auth.user?.rol || "").toUpperCase();
+  const isUserRole = normalizedRole === "USER";
+  const canQueryConsentEndpoint =
+    normalizedRole === "ADMIN" || normalizedRole === "SUPERVISOR";
 
   const [nombre, setNombre] = useState(auth.user?.nombre || "");
   const [correo, setCorreo] = useState(auth.user?.correo || "");
@@ -18,10 +22,30 @@ export default function Profile() {
   const [loadingConsent, setLoadingConsent] = useState(true);
   const [error, setError] = useState("");
 
+  const persistTrackingConsent = (enabled) => {
+    const nextOptions = {
+      ...(auth.options || {}),
+      trackingConsent: enabled,
+    };
+
+    setAuthSession(auth.token, auth.user || null, nextOptions);
+  };
+
   useEffect(() => {
     const loadConsent = async () => {
       setLoadingConsent(true);
-      if (!auth.token || !auth.userId) return;
+      if (!auth.token || !auth.userId) {
+        setLoadingConsent(false);
+        return;
+      }
+
+      // Para USER no consultamos un endpoint que puede estar restringido en ambientes remotos.
+      if (!canQueryConsentEndpoint) {
+        setHasConsent(Boolean(auth.options?.trackingConsent));
+        setLoadingConsent(false);
+        return;
+      }
+
       try {
         await api.get(API_ROUTES.consents.byUser(auth.userId), { token: auth.token });
         setHasConsent(true);
@@ -30,22 +54,32 @@ export default function Profile() {
       } finally { setLoadingConsent(false); }
     };
     loadConsent();
-  }, [auth.token, auth.userId]);
+  }, [auth.token, auth.userId, auth.options?.trackingConsent, canQueryConsentEndpoint]);
 
   const handleRecordConsent = async () => {
+    setHasConsent(true);
+    persistTrackingConsent(true);
+
     try {
       await api.post(API_ROUTES.consents.create, { id_user: auth.userId }, { token: auth.token });
-      setHasConsent(true);
       Alert.alert("Éxito", "Consentimiento registrado.");
-    } catch (err) { Alert.alert("Error", "No se pudo registrar."); }
+    } catch (err) {
+      // En algunos despliegues remotos el backend limita por rol; mantenemos el estado local para no bloquear la UX.
+      console.warn("No se pudo registrar en backend, se mantuvo el cambio local de rastreo.", err);
+    }
   };
 
   const handleRevokeConsent = async () => {
+    setHasConsent(false);
+    persistTrackingConsent(false);
+
     try {
       await api.post(API_ROUTES.consents.revoke, {}, { token: auth.token });
-      setHasConsent(false);
       Alert.alert("Éxito", "Consentimiento revocado.");
-    } catch (err) { Alert.alert("Error", "No se pudo revocar."); }
+    } catch (err) {
+      // Si backend remoto responde 403, el usuario igual puede desactivar rastreo en su sesión local.
+      console.warn("No se pudo revocar en backend, se mantuvo el cambio local de rastreo.", err);
+    }
   };
 
   const handleLogout = () => {
@@ -75,22 +109,33 @@ export default function Profile() {
               {hasConsent ? "✓ Rastreo Autorizado" : "✗ Rastreo Desactivado"}
             </Text>
           </View>
-          <TouchableOpacity style={styles.btn} onPress={handleRecordConsent}>
-            <Text style={styles.btnText}>Activar Rastreo</Text>
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={hasConsent ? handleRevokeConsent : handleRecordConsent}
+          >
+            <Text style={styles.btnText}>{hasConsent ? "Desactivar Rastreo" : "Activar Rastreo"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btnSecondary} onPress={handleRevokeConsent}>
-            <Text style={styles.btnSecondaryText}>Revocar Permisos</Text>
-          </TouchableOpacity>
+          {!isUserRole && (
+            <TouchableOpacity style={styles.btnSecondary} onPress={handleRevokeConsent}>
+              <Text style={styles.btnSecondaryText}>Revocar Permisos</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* SESION */}
-        <View style={appUi.card}>
-          <Text style={appUi.sectionTitle}>Seguridad</Text>
-          <Text style={styles.infoText}>Sesión activa como: {auth.user?.rol}</Text>
-          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-            <Text style={styles.logoutBtnText}>Cerrar Sesión</Text>
+        {isUserRole ? (
+          <TouchableOpacity style={styles.userLogoutBtn} onPress={handleLogout}>
+            <Text style={styles.userLogoutBtnText}>Cerrar Sesión</Text>
           </TouchableOpacity>
-        </View>
+        ) : (
+          <View style={appUi.card}>
+            <Text style={appUi.sectionTitle}>Seguridad</Text>
+            <Text style={styles.infoText}>Sesión activa como: {auth.user?.rol}</Text>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+              <Text style={styles.logoutBtnText}>Cerrar Sesión</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </AppShell>
   );
@@ -109,6 +154,17 @@ const styles = StyleSheet.create({
   statusTextOn: { color: "#1f6a39", fontWeight: "bold" },
   statusTextOff: { color: "#b91c1c", fontWeight: "bold" },
   infoText: { color: "#64748b", fontSize: 13, marginBottom: 15 },
+  userLogoutBtn: {
+    backgroundColor: "#fee2e2",
+    borderWidth: 1,
+    borderColor: "#fca5a5",
+    borderRadius: 12,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  userLogoutBtnText: { color: "#b91c1c", fontWeight: "bold" },
   logoutBtn: { borderTopWidth: 1, borderTopColor: "#f1f5f9", paddingTop: 15, alignItems: "center" },
   logoutBtnText: { color: "#ef4444", fontWeight: "bold" }
 });

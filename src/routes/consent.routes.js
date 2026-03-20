@@ -9,9 +9,9 @@ router.use(verifyToken);
 router.post('/', consentController.recordConsent);
 
 // Obtener consentimiento de un usuario (Admin, Supervisor o el propio usuario)
-router.get('/user/:id_user', checkRole(['ADMIN', 'SUPERVISOR', 'USUARIO']), consentController.getConsentByUser);
+router.get('/user/:id_user', checkRole(['ADMIN', 'SUPERVISOR', 'USER']), consentController.getConsentByUser);
 
-// Revocar consentimiento (El propio usuario lo revoca)
-router.post('/revoke', checkRole(['USUARIO']), consentController.revokeConsent);
+// Revocar consentimiento (Cualquier usuario autenticado puede revocar el suyo)
+router.post('/revoke', consentController.revokeConsent);
 
 module.exports = router;
