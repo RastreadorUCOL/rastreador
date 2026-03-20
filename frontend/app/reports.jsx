@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -9,960 +9,580 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    Modal,
 } from "react-native";
 import AppShell, { appUi } from "../_components/app-shell";
 import { API_ROUTES } from "../lib/api-routes";
 import { getAuthContext } from "../lib/auth-session";
 import { api } from "../lib/fetch";
 
-// Conditional import for map component (web only)
-let MapComponent = null;
-if (Platform.OS === "web") {
-  try {
-    const dynamic = require("react").lazy(
-      () => import("../_components/route-map"),
-    );
-    MapComponent = dynamic;
-  } catch (e) {
-    MapComponent = null;
-  }
+function formatDate(dateStr) {
+    if (!dateStr) return "";
+    return new Date(dateStr).toLocaleString();
 }
 
-// Utility functions for date formatting
-function todayIsoDate() {
-  return new Date().toISOString().slice(0, 10);
-}
-function daysAgoIsoDate(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+function formatDateOnly(dateStr) {
+    if (!dateStr) return "";
+    return new Date(dateStr).toLocaleDateString();
 }
 
-// Lazy Map Viewer Component
-function MapRouteViewer({ routeData }) {
-  if (!routeData || routeData.length === 0) return null;
-
-  // Calculate center and bounds
-  const lats = routeData.map((r) => r.latitud).filter(Boolean);
-  const lngs = routeData.map((r) => r.longitud).filter(Boolean);
-
-  if (lats.length === 0 || lngs.length === 0) return null;
-
-  const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-  const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-
-  return (
-    <View style={styles.mapWrapper}>
-      <iframe
-        title="route-map"
-        style={{
-          width: "100%",
-          height: "400px",
-          border: "none",
-          borderRadius: "12px",
-        }}
-        srcDoc={`
-          <!DOCTYPE html>
-          <html>
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-              <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
-              <style>
-                body { margin: 0; padding: 0; }
-                #map { position: absolute; top: 0; bottom: 0; width: 100%; }
-              <\/style>
-            </head>
-            <body>
-              <div id="map"><\/div>
-              <script>
-                const map = L.map('map').setView([${centerLat}, ${centerLng}], 13);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                  attribution: '© OpenStreetMap contributors',
-                  maxZoom: 19,
-                }).addTo(map);
-
-                const routePoints = ${JSON.stringify(routeData.map((r) => [r.latitud, r.longitud]))};
-                
-                // Draw polyline
-                L.polyline(routePoints.filter(p => p[0] && p[1]), {
-                  color: '#3b82f6',
-                  weight: 3,
-                  opacity: 0.7,
-                  smoothFactor: 1
-                }).addTo(map);
-
-                // Mark start and end
-                L.circleMarker([${routeData[0].latitud}, ${routeData[0].longitud}], {
-                  radius: 8,
-                  fillColor: '#10b981',
-                  color: '#fff',
-                  weight: 2,
-                  opacity: 1,
-                  fillOpacity: 0.8
-                }).bindPopup('Inicio').addTo(map);
-
-                L.circleMarker([${routeData[routeData.length - 1].latitud}, ${routeData[routeData.length - 1].longitud}], {
-                  radius: 8,
-                  fillColor: '#ef4444',
-                  color: '#fff',
-                  weight: 2,
-                  opacity: 1,
-                  fillOpacity: 0.8
-                }).bindPopup('Fin').addTo(map);
-              <\/script>
-            </body>
-          </html>
-        `}
-      />
-    </View>
-  );
-}
-
-// Helper component for alert color mapping
-function getAlertColor(tipo) {
-  const colorMap = {
-    BATTERY_LOW: styles.alertBattery,
-    SIGNAL_LOST: styles.alertSignal,
-    DISCONNECTED: styles.alertDisconnected,
-    DEVICE_OFF: styles.alertDeviceOff,
-    GEOFENCE_ENTER: styles.alertGeofence,
-    GEOFENCE_EXIT: styles.alertGeofenceExit,
-  };
-  return colorMap[tipo] || styles.alertDefault;
-}
-
-// Report Card Component
-function ReportCard({ title, value, label, color }) {
-  return (
-    <View
-      style={[
-        appUi.card,
-        {
-          flex: 1,
-          minWidth: "45%",
-          borderLeftColor: color,
-          borderLeftWidth: 4,
-        },
-      ]}
-    >
-      <Text style={styles.cardTitle}>{title}</Text>
-      <Text style={[styles.cardValue, { color }]}>{value}</Text>
-      <Text style={styles.cardLabel}>{label}</Text>
-    </View>
-  );
-}
-
-// Collapsible Section Component
-function CollapsibleSection({ title, isExpanded, onToggle, children }) {
-  return (
-    <View style={appUi.card}>
-      <TouchableOpacity onPress={onToggle} style={styles.sectionHeader}>
-        <Text style={[appUi.sectionTitle, { flex: 1 }]}>{title}</Text>
-        <Text style={styles.toggleIcon}>{isExpanded ? "▼" : "▶"}</Text>
-      </TouchableOpacity>
-      {isExpanded && children}
-    </View>
-  );
-}
-
-// Main Reports Component
 export default function Reports() {
-  const auth = getAuthContext();
-  const [userId, setUserId] = useState(auth.userId ? String(auth.userId) : "");
-  const [startDate, setStartDate] = useState(daysAgoIsoDate(7));
-  const [endDate, setEndDate] = useState(todayIsoDate());
-  const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState("");
-  const [routeRows, setRouteRows] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [alerts, setAlerts] = useState([]);
-  const [geofenceEvents, setGeofenceEvents] = useState([]);
-  const [expandedSection, setExpandedSection] = useState(null);
+    const auth = getAuthContext();
+    const isAdmin = auth.role?.toLowerCase() === "admin" || auth.role?.toLowerCase() === "administrador";
 
-  // Check if user is admin
-  const isAdmin =
-    auth.role?.toLowerCase() === "admin" ||
-    auth.role?.toLowerCase() === "administrador";
+    const [userId, setUserId] = useState("");
+    const [startDate, setStartDate] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        return d.toISOString().split("T")[0];
+    });
+    const [endDate, setEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+    const [loading, setLoading] = useState(false);
+    const [downloading, setDownloading] = useState(false);
+    const [error, setError] = useState("");
 
-  const canRequest = Boolean(auth.token && userId && startDate && endDate);
+    const [reportData, setReportData] = useState(null);
+    const [showMap, setShowMap] = useState(false);
 
-  const summary = useMemo(
-    () => ({
-      routePoints: routeRows.length,
-      averageSpeed: stats?.velocidad_promedio ?? "0.00",
-      stoppedMinutes: stats?.tiempo_total_parado_minutos ?? "0.00",
-      stopsCount: Array.isArray(stats?.paradas) ? stats.paradas.length : 0,
-      alertsCount: alerts.length,
-      eventsCount: geofenceEvents.length,
-    }),
-    [routeRows, stats, alerts, geofenceEvents],
-  );
-
-  const runReports = async () => {
-    if (!canRequest) return;
-    setLoading(true);
-    setError("");
-    try {
-      const query = { startDate, endDate };
-      const [routeData, statsData, alertsData, geofenceData] =
-        await Promise.all([
-          api.get(API_ROUTES.reports.route(userId), {
-            token: auth.token,
-            query,
-          }),
-          api.get(API_ROUTES.reports.stats(userId), {
-            token: auth.token,
-            query,
-          }),
-          api
-            .get(API_ROUTES.reports.alerts(userId), {
-              token: auth.token,
-              query,
-            })
-            .catch(() => []),
-          api
-            .get(API_ROUTES.reports.geofenceEvents(userId), {
-              token: auth.token,
-              query,
-            })
-            .catch(() => []),
-        ]);
-      setRouteRows(Array.isArray(routeData) ? routeData : []);
-      setStats(statsData || null);
-      setAlerts(Array.isArray(alertsData) ? alertsData : []);
-      setGeofenceEvents(Array.isArray(geofenceData) ? geofenceData : []);
-    } catch (err) {
-      setError("Error al generar reportes.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const downloadReport = async (format) => {
-    if (!auth.token) {
-      Alert.alert("Error", "No has iniciado sesión");
-      return;
+    if (!isAdmin) {
+        return (
+            <AppShell title="Reportes" subtitle="Solo para administradores">
+                <View style={styles.accessDenied}>
+                    <Text style={styles.accessIcon}>🔒</Text>
+                    <Text style={styles.accessTitle}>Acceso Denegado</Text>
+                    <Text style={styles.accessMessage}>
+                        Solo los administradores pueden acceder a los reportes.
+                    </Text>
+                    <Text style={styles.accessRole}>Tu rol: {auth.role || "No definido"}</Text>
+                </View>
+            </AppShell>
+        );
     }
 
-    if (!userId || !startDate || !endDate) {
-      Alert.alert("Error", "Completa todos los filtros antes de descargar");
-      return;
-    }
+    const canGenerate = Boolean(userId && startDate && endDate);
 
-    setDownloading(true);
-    setError("");
-
-    try {
-      // Construir URL
-      const baseUrl = API_ROUTES.reports.exportPdf(userId);
-      const apiBase = baseUrl.substring(0, baseUrl.lastIndexOf("/reports"));
-      const endpoint =
-        format === "pdf"
-          ? `${apiBase}/reports/export/pdf/${userId}`
-          : `${apiBase}/reports/export/excel/${userId}`;
-
-      const params = new URLSearchParams({
-        startDate: startDate,
-        endDate: endDate,
-      });
-      const fullUrl = `${endpoint}?${params.toString()}`;
-
-      console.log("📥 Descargando desde:", fullUrl);
-
-      const response = await fetch(fullUrl, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${auth.token}`,
-          Accept:
-            format === "pdf"
-              ? "application/pdf"
-              : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-      });
-
-      if (!response.ok) {
-        let errorMsg = `Error ${response.status}`;
-        const contentType = response.headers.get("content-type");
-
-        if (contentType?.includes("application/json")) {
-          try {
-            const errorData = await response.json();
-            errorMsg = errorData.message || errorData.error || errorMsg;
-          } catch {
-            errorMsg = (await response.text()) || errorMsg;
-          }
-        } else {
-          errorMsg = (await response.text()) || errorMsg;
+    const generateReport = async () => {
+        if (!canGenerate) {
+            Alert.alert("Error", "Completa todos los campos");
+            return;
         }
 
-        throw new Error(errorMsg);
-      }
+        setLoading(true);
+        setError("");
+        setReportData(null);
 
-      const blob = await response.blob();
+        try {
+            const query = { startDate, endDate };
 
-      if (blob.size === 0) {
-        throw new Error("El servidor devolvió un archivo vacío");
-      }
+            const [routeRes, statsRes, alertsRes, geofenceRes] = await Promise.all([
+                api.get(API_ROUTES.reports.route(userId), { token: auth.token, query }).catch(() => []),
+                api.get(API_ROUTES.reports.stats(userId), { token: auth.token, query }).catch(() => null),
+                api.get(API_ROUTES.reports.alerts(userId), { token: auth.token, query }).catch(() => []),
+                api.get(API_ROUTES.reports.geofenceEvents(userId), { token: auth.token, query }).catch(() => []),
+            ]);
 
-      const contentDisposition = response.headers.get("content-disposition");
-      const filename = contentDisposition
-        ? contentDisposition
-            .split("filename=")[1]
-            ?.replace(/"/g, "")
-            ?.split(";")[0]
-        : `reporte_${userId}_${startDate}_a_${endDate}.${format === "pdf" ? "pdf" : "xlsx"}`;
+            setReportData({
+                route: Array.isArray(routeRes) ? routeRes : [],
+                stats: statsRes || { velocidad_promedio: 0, velocidad_maxima: 0, tiempo_total_parado_minutos: 0, paradas: [] },
+                alerts: Array.isArray(alertsRes) ? alertsRes : [],
+                geofences: Array.isArray(geofenceRes) ? geofenceRes : [],
+            });
+        } catch (err) {
+            setError(err.message || "Error al generar reporte");
+            Alert.alert("Error", err.message || "Error al generar reporte");
+        } finally {
+            setLoading(false);
+        }
+    };
 
-      if (Platform.OS === "web") {
-        const blobUrl = URL.createObjectURL(blob);
-        const downloadLink = document.createElement("a");
-        downloadLink.href = blobUrl;
-        downloadLink.download = filename;
-        downloadLink.style.display = "none";
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
+    const downloadFile = async (format) => {
+        if (!reportData) {
+            Alert.alert("Error", "Primero genera un reporte");
+            return;
+        }
 
-        setTimeout(() => {
-          document.body.removeChild(downloadLink);
-          URL.revokeObjectURL(blobUrl);
-        }, 100);
+        setDownloading(true);
+        try {
+            const endpoint = format === "pdf"
+                ? API_ROUTES.reports.exportPdf(userId)
+                : API_ROUTES.reports.exportExcel(userId);
 
-        console.log("✅ Descarga completada:", filename);
-        Alert.alert("✅ Éxito", `Descarga de ${filename} iniciada`);
-      } else {
-        Alert.alert(
-          "✅ Éxito",
-          `Reporte generado. Tamaño: ${(blob.size / 1024).toFixed(2)} KB`,
-        );
-      }
-    } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : "Error desconocido en descarga";
-      console.error("❌ Error:", errorMsg);
-      setError(`Error: ${errorMsg}`);
-      Alert.alert("❌ Error en descarga", errorMsg);
-    } finally {
-      setDownloading(false);
-    }
-  };
+            const url = `${endpoint}?startDate=${startDate}&endDate=${endDate}`;
 
-  return (
-    <AppShell
-      subtitle="Análisis de rutas, tiempos, alertas y eventos."
-      title="Reportes"
-    >
-      {!isAdmin ? (
-        <View style={styles.accessDeniedContainer}>
-          <Text style={styles.accessDeniedIcon}>🔒</Text>
-          <Text style={styles.accessDeniedTitle}>Acceso Denegado</Text>
-          <Text style={styles.accessDeniedMessage}>
-            Solo los administradores pueden acceder a los reportes.
-          </Text>
-          <Text style={styles.accessDeniedRole}>
-            Tu rol actual: {auth.role || "No definido"}
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.scrollContainer}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.container}>
-            {/* FILTROS */}
-            <View style={appUi.card}>
-              <Text style={appUi.sectionTitle}>Filtros</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="User ID"
-                value={userId}
-                onChangeText={setUserId}
-                keyboardType="numeric"
-              />
-              <View style={styles.row}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Inicio (YYYY-MM-DD)"
-                  value={startDate}
-                  onChangeText={setStartDate}
-                />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Fin (YYYY-MM-DD)"
-                  value={endDate}
-                  onChangeText={setEndDate}
-                />
-              </View>
-              <TouchableOpacity
-                style={[styles.primaryBtn, !canRequest && styles.disabledBtn]}
-                disabled={!canRequest}
-                onPress={runReports}
-              >
-                <Text style={styles.primaryBtnText}>
-                  {loading ? "Cargando..." : "Generar Reporte"}
-                </Text>
-              </TouchableOpacity>
-              {error && <Text style={styles.errorText}>{error}</Text>}
-            </View>
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    Authorization: `Bearer ${auth.token}`,
+                    Accept: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                },
+            });
 
-            {/* RESUMEN */}
-            {(routeRows.length > 0 || alerts.length > 0) && (
-              <>
-                <Text style={appUi.sectionTitle}>RESUMEN</Text>
-                <View style={styles.grid}>
-                  <ReportCard
-                    title="Puntos de Ruta"
-                    value={summary.routePoints}
-                    label="coordenadas"
-                    color="#3b82f6"
-                  />
-                  <ReportCard
-                    title="Vel. Promedio"
-                    value={`${summary.averageSpeed} km/h`}
-                    label="velocidad"
-                    color="#10b981"
-                  />
-                  <ReportCard
-                    title="Paradas"
-                    value={summary.stopsCount}
-                    label={`${summary.stoppedMinutes}min`}
-                    color="#f59e0b"
-                  />
-                  <ReportCard
-                    title="Alertas"
-                    value={summary.alertsCount}
-                    label="eventos"
-                    color="#ef4444"
-                  />
-                  <ReportCard
-                    title="Geocercas"
-                    value={summary.eventsCount}
-                    label="eventos"
-                    color="#8b5cf6"
-                  />
-                </View>
-              </>
-            )}
+            if (!response.ok) {
+                throw new Error(`Error ${response.status}`);
+            }
 
-            {/* SECCIÓN RUTAS */}
-            {routeRows.length > 0 && (
-              <CollapsibleSection
-                title={`Rutas Recorridas (${routeRows.length} puntos)`}
-                isExpanded={expandedSection === "routes"}
-                onToggle={() =>
-                  setExpandedSection(
-                    expandedSection === "routes" ? null : "routes",
-                  )
-                }
-              >
-                {/* MAPA (solo en web) */}
-                {Platform.OS === "web" && routeRows.length > 0 && (
-                  <View style={styles.mapContainer}>
-                    <MapRouteViewer routeData={routeRows} />
-                  </View>
-                )}
+            const blob = await response.blob();
 
-                <Text style={styles.sectionInfo}>Detalles de la ruta:</Text>
+            if (Platform.OS === "web") {
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = blobUrl;
+                a.download = `Reporte_${userId}_${startDate}.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+                Alert.alert("Éxito", `Reporte ${format.toUpperCase()} descargado`);
+            } else {
+                Alert.alert("Éxito", `Reporte generado (${(blob.size / 1024).toFixed(1)} KB)`);
+            }
+        } catch (err) {
+            Alert.alert("Error", err.message || "Error al descargar");
+        } finally {
+            setDownloading(false);
+        }
+    };
 
-                {/* PUNTOS DE UBICACIÓN */}
-                <Text style={[styles.sectionSubtitle, { marginTop: 12 }]}>
-                  📍 Puntos de Recorrido
-                </Text>
-                {routeRows.slice(0, 10).map((point, idx) => (
-                  <View key={idx} style={styles.dataItem}>
-                    <Text style={styles.dataLabel}>•</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.dataText}>
-                        {new Date(point.timestamp_captura).toLocaleString()}
-                      </Text>
-                      <Text style={styles.dataSubtext}>
-                        📍 Lat: {point.latitud?.toFixed(4)}, Lng:{" "}
-                        {point.longitud?.toFixed(4)}
-                      </Text>
-                      <Text style={styles.dataSubtext}>
-                        ⚡ Velocidad: {point.velocidad || 0} km/h | 🔋 Batería:{" "}
-                        {point.bateria || "N/A"}%
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-                {routeRows.length > 10 && (
-                  <Text style={styles.moreText}>
-                    ... y {routeRows.length - 10} puntos más
-                  </Text>
-                )}
-              </CollapsibleSection>
-            )}
+    const { route = [], stats = {}, alerts = [], geofences = [] } = reportData || {};
 
-            {/* SECCIÓN VELOCIDAD Y PARADAS */}
-            {stats && (
-              <CollapsibleSection
-                title="⚡ Velocidad y Paradas"
-                isExpanded={expandedSection === "speed"}
-                onToggle={() =>
-                  setExpandedSection(
-                    expandedSection === "speed" ? null : "speed",
-                  )
-                }
-              >
-                <View style={styles.statsGrid}>
-                  <View style={[appUi.card, styles.statCard]}>
-                    <Text style={styles.statIcon}>⚡</Text>
-                    <Text style={styles.statTitle}>Velocidad Promedio</Text>
-                    <Text style={styles.statValue}>
-                      {stats.velocidad_promedio || 0}
-                    </Text>
-                    <Text style={styles.statUnit}>km/h</Text>
-                  </View>
+    return (
+        <AppShell title="Reportes" subtitle="Análisis de rutas, tiempos y actividad">
+            <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.container}>
+                    <View style={appUi.card}>
+                        <Text style={appUi.sectionTitle}>Filtros de Búsqueda</Text>
 
-                  <View style={[appUi.card, styles.statCard]}>
-                    <Text style={styles.statIcon}>⏸️</Text>
-                    <Text style={styles.statTitle}>Tiempo Total Parado</Text>
-                    <Text style={styles.statValue}>
-                      {stats.tiempo_total_parado_minutos || 0}
-                    </Text>
-                    <Text style={styles.statUnit}>minutos</Text>
-                  </View>
+                        <Text style={styles.label}>User ID</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Ingresa el ID del usuario"
+                            value={userId}
+                            onChangeText={setUserId}
+                            keyboardType="numeric"
+                        />
 
-                  {stats.velocidad_maxima && (
-                    <View style={[appUi.card, styles.statCard]}>
-                      <Text style={styles.statIcon}>🚀</Text>
-                      <Text style={styles.statTitle}>Velocidad Máxima</Text>
-                      <Text style={styles.statValue}>
-                        {stats.velocidad_maxima}
-                      </Text>
-                      <Text style={styles.statUnit}>km/h</Text>
-                    </View>
-                  )}
-
-                  {stats.tiempo_viajando_minutos && (
-                    <View style={[appUi.card, styles.statCard]}>
-                      <Text style={styles.statIcon}>🛣️</Text>
-                      <Text style={styles.statTitle}>Tiempo en Movimiento</Text>
-                      <Text style={styles.statValue}>
-                        {stats.tiempo_viajando_minutos}
-                      </Text>
-                      <Text style={styles.statUnit}>minutos</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* DETALLES DE PARADAS */}
-                {stats.paradas &&
-                  Array.isArray(stats.paradas) &&
-                  stats.paradas.length > 0 && (
-                    <View style={{ marginTop: 15 }}>
-                      <Text style={styles.sectionSubtitle}>
-                        🛑 Lugares de Parada ({stats.paradas.length})
-                      </Text>
-                      {stats.paradas.slice(0, 8).map((parada, idx) => (
-                        <View key={idx} style={styles.paradaItem}>
-                          <View style={styles.paradaHeader}>
-                            <Text style={styles.paradaIndex}>{idx + 1}.</Text>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.paradaTime}>
-                                {new Date(parada.inicio).toLocaleString()} -{" "}
-                                {new Date(parada.fin).toLocaleString()}
-                              </Text>
-                              <Text style={styles.paradaDuration}>
-                                ⏱️ Duración: {parada.duracion_minutos || 0}{" "}
-                                minutos
-                              </Text>
+                        <View style={styles.row}>
+                            <View style={styles.half}>
+                                <Text style={styles.label}>Fecha Inicio</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="YYYY-MM-DD"
+                                    value={startDate}
+                                    onChangeText={setStartDate}
+                                />
                             </View>
-                          </View>
-                          <Text style={styles.paradaLocation}>
-                            📍 {parada.latitud?.toFixed(4)},{" "}
-                            {parada.longitud?.toFixed(4)}
-                          </Text>
+                            <View style={styles.half}>
+                                <Text style={styles.label}>Fecha Fin</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="YYYY-MM-DD"
+                                    value={endDate}
+                                    onChangeText={setEndDate}
+                                />
+                            </View>
                         </View>
-                      ))}
-                      {stats.paradas.length > 8 && (
-                        <Text style={styles.moreText}>
-                          ... y {stats.paradas.length - 8} paradas más
-                        </Text>
-                      )}
-                    </View>
-                  )}
-              </CollapsibleSection>
-            )}
 
-            {/* SECCIÓN ALERTAS */}
-            {alerts.length > 0 && (
-              <CollapsibleSection
-                title={`Historial de Alertas (${alerts.length} alertas)`}
-                isExpanded={expandedSection === "alerts"}
-                onToggle={() =>
-                  setExpandedSection(
-                    expandedSection === "alerts" ? null : "alerts",
-                  )
-                }
-              >
-                {alerts.slice(0, 15).map((alert, idx) => (
-                  <View
-                    key={idx}
-                    style={[styles.alertItem, getAlertColor(alert.tipo_alerta)]}
-                  >
-                    <View style={styles.alertBadge}>
-                      <Text style={styles.alertBadgeText}>
-                        {alert.tipo_alerta[0]}
-                      </Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.alertTitle}>
-                        {alert.tipo_alerta.replace(/_/g, " ")}
-                      </Text>
-                      <Text style={styles.alertTime}>
-                        {new Date(alert.timestamp_alerta).toLocaleString()}
-                      </Text>
-                      {alert.descripcion && (
-                        <Text style={styles.alertDesc}>
-                          {alert.descripcion}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-                {alerts.length > 15 && (
-                  <Text style={styles.moreText}>
-                    ... y {alerts.length - 15} alertas más
-                  </Text>
-                )}
-              </CollapsibleSection>
-            )}
+                        <TouchableOpacity
+                            style={[styles.btnPrimary, !canGenerate && styles.btnDisabled]}
+                            onPress={generateReport}
+                            disabled={!canGenerate || loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text style={styles.btnText}>📊 Generar Reporte</Text>
+                            )}
+                        </TouchableOpacity>
 
-            {/* SECCIÓN EVENTOS GEOCERCAS */}
-            {geofenceEvents.length > 0 && (
-              <CollapsibleSection
-                title={`Eventos de Geocercas (${geofenceEvents.length} eventos)`}
-                isExpanded={expandedSection === "geofence"}
-                onToggle={() =>
-                  setExpandedSection(
-                    expandedSection === "geofence" ? null : "geofence",
-                  )
-                }
-              >
-                {geofenceEvents.slice(0, 15).map((event, idx) => (
-                  <View
-                    key={idx}
-                    style={[
-                      styles.eventItem,
-                      event.tipo_evento === "ENTER"
-                        ? styles.enterEvent
-                        : styles.exitEvent,
-                    ]}
-                  >
-                    <View style={styles.eventIcon}>
-                      <Text style={styles.eventIconText}>
-                        {event.tipo_evento === "ENTER" ? "→" : "←"}
-                      </Text>
+                        {error && <Text style={styles.error}>{error}</Text>}
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.eventTitle}>
-                        {event.geofence_nombre}
-                      </Text>
-                      <Text style={styles.eventType}>
-                        {event.tipo_evento === "ENTER" ? "Entrada" : "Salida"}
-                      </Text>
-                      <Text style={styles.eventTime}>
-                        {new Date(event.timestamp_evento).toLocaleString()}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-                {geofenceEvents.length > 15 && (
-                  <Text style={styles.moreText}>
-                    ... y {geofenceEvents.length - 15} eventos más
-                  </Text>
-                )}
-              </CollapsibleSection>
-            )}
 
-            {/* EXPORTAR */}
-            {(routeRows.length > 0 || alerts.length > 0) && (
-              <View style={appUi.card}>
-                <Text style={appUi.sectionTitle}>Descargar Reportes</Text>
-                <Text style={styles.exportInfo}>
-                  Obtén un reporte completo en tu formato preferido
-                </Text>
-                <View style={styles.row}>
-                  <TouchableOpacity
-                    style={[
-                      styles.exportBtn,
-                      downloading && styles.disabledBtn,
-                    ]}
-                    onPress={() => downloadReport("pdf")}
-                    disabled={downloading}
-                  >
-                    <Text style={styles.exportBtnText}>
-                      {downloading ? "⏳ Descargando..." : "📄 PDF"}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.exportBtn,
-                      downloading && styles.disabledBtn,
-                    ]}
-                    onPress={() => downloadReport("excel")}
-                    disabled={downloading}
-                  >
-                    <Text style={styles.exportBtnText}>
-                      {downloading ? "⏳ Descargando..." : "📊 Excel"}
-                    </Text>
-                  </TouchableOpacity>
+                    {reportData && (
+                        <>
+                            <Text style={appUi.sectionTitle}>📋 Resumen del Período</Text>
+                            <View style={styles.summaryGrid}>
+                                <View style={[styles.statCard, { borderLeftColor: "#3b82f6" }]}>
+                                    <Text style={styles.statValue}>{route.length}</Text>
+                                    <Text style={styles.statLabel}>Puntos de Ruta</Text>
+                                </View>
+                                <View style={[styles.statCard, { borderLeftColor: "#10b981" }]}>
+                                    <Text style={styles.statValue}>{stats.velocidad_promedio || 0} km/h</Text>
+                                    <Text style={styles.statLabel}>Vel. Promedio</Text>
+                                </View>
+                                <View style={[styles.statCard, { borderLeftColor: "#f59e0b" }]}>
+                                    <Text style={styles.statValue}>{stats.paradas?.length || 0}</Text>
+                                    <Text style={styles.statLabel}>Paradas</Text>
+                                </View>
+                                <View style={[styles.statCard, { borderLeftColor: "#ef4444" }]}>
+                                    <Text style={styles.statValue}>{alerts.length}</Text>
+                                    <Text style={styles.statLabel}>Alertas</Text>
+                                </View>
+                                <View style={[styles.statCard, { borderLeftColor: "#8b5cf6" }]}>
+                                    <Text style={styles.statValue}>{geofences.length}</Text>
+                                    <Text style={styles.statLabel}>Eventos Geocerca</Text>
+                                </View>
+                            </View>
+
+                            <View style={appUi.card}>
+                                <View style={styles.sectionHeader}>
+                                    <Text style={appUi.sectionTitle}>🗺️ Rutas Recorridas</Text>
+                                    <TouchableOpacity onPress={() => setShowMap(true)}>
+                                        <Text style={styles.mapLink}>Ver mapa</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <Text style={styles.sectionInfo}>
+                                    {route.length} puntos registrados del {formatDateOnly(startDate)} al {formatDateOnly(endDate)}
+                                </Text>
+                                {route.slice(0, 5).map((r, i) => (
+                                    <View key={i} style={styles.routeItem}>
+                                        <Text style={styles.routeTime}>{formatDate(r.timestamp_captura)}</Text>
+                                        <Text style={styles.routeCoord}>
+                                            📍 {r.latitud?.toFixed(5)}, {r.longitud?.toFixed(5)}
+                                        </Text>
+                                        <Text style={styles.routeSpeed}>⚡ {r.velocidad || 0} km/h</Text>
+                                    </View>
+                                ))}
+                                {route.length > 5 && (
+                                    <Text style={styles.more}>... y {route.length - 5} puntos más</Text>
+                                )}
+                            </View>
+
+                            <View style={appUi.card}>
+                                <Text style={appUi.sectionTitle}>⏱️ Tiempos de Parada y Velocidad</Text>
+                                <View style={styles.statsRow}>
+                                    <View style={styles.statBox}>
+                                        <Text style={styles.statBoxValue}>{stats.velocidad_promedio || 0}</Text>
+                                        <Text style={styles.statBoxLabel}>km/h promedio</Text>
+                                    </View>
+                                    <View style={styles.statBox}>
+                                        <Text style={styles.statBoxValue}>{stats.velocidad_maxima || 0}</Text>
+                                        <Text style={styles.statBoxLabel}>km/h máxima</Text>
+                                    </View>
+                                    <View style={styles.statBox}>
+                                        <Text style={styles.statBoxValue}>{stats.tiempo_total_parado_minutos || 0}</Text>
+                                        <Text style={styles.statBoxLabel}>min parado</Text>
+                                    </View>
+                                </View>
+
+                                {stats.paradas && stats.paradas.length > 0 && (
+                                    <>
+                                        <Text style={styles.subTitle}>🛑 Lugares de Parada ({stats.paradas.length})</Text>
+                                        {stats.paradas.slice(0, 5).map((p, i) => (
+                                            <View key={i} style={styles.paradaItem}>
+                                                <Text style={styles.paradaTime}>
+                                                    {formatDate(p.inicio || p.start)} - {formatDate(p.fin || p.end)}
+                                                </Text>
+                                                <Text style={styles.paradaDuration}>
+                                                    ⏱️ Duración: {p.duracion_minutos || p.duracion || 0} minutos
+                                                </Text>
+                                                <Text style={styles.paradaLoc}>
+                                                    📍 {p.latitud?.toFixed(4) || p.lat?.toFixed(4)}, {p.longitud?.toFixed(4) || p.lng?.toFixed(4)}
+                                                </Text>
+                                            </View>
+                                        ))}
+                                    </>
+                                )}
+                            </View>
+
+                            <View style={appUi.card}>
+                                <Text style={appUi.sectionTitle}>⚠️ Historial de Actividad y Alertas</Text>
+                                {alerts.length === 0 ? (
+                                    <Text style={styles.emptyText}>Sin alertas en este período</Text>
+                                ) : (
+                                    alerts.slice(0, 10).map((a, i) => (
+                                        <View key={i} style={styles.alertItem}>
+                                            <View style={[styles.alertBadge, { backgroundColor: getAlertColor(a.tipo_alerta) }]}>
+                                                <Text style={styles.alertBadgeText}>{a.tipo_alerta?.[0] || "?"}</Text>
+                                            </View>
+                                            <View style={styles.alertInfo}>
+                                                <Text style={styles.alertType}>{a.tipo_alerta?.replace(/_/g, " ")}</Text>
+                                                <Text style={styles.alertTime}>{formatDate(a.timestamp_alerta)}</Text>
+                                                {a.descripcion && <Text style={styles.alertDesc}>{a.descripcion}</Text>}
+                                            </View>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+
+                            <View style={appUi.card}>
+                                <Text style={appUi.sectionTitle}>📍 Eventos de Geocercas</Text>
+                                {geofences.length === 0 ? (
+                                    <Text style={styles.emptyText}>Sin eventos de geocercas</Text>
+                                ) : (
+                                    geofences.slice(0, 10).map((g, i) => (
+                                        <View key={i} style={[styles.geofenceItem, g.tipo_evento === "ENTER" ? styles.enterEvent : styles.exitEvent]}>
+                                            <Text style={styles.geofenceIcon}>{g.tipo_evento === "ENTER" ? "→" : "←"}</Text>
+                                            <View>
+                                                <Text style={styles.geofenceName}>{g.geofence_nombre}</Text>
+                                                <Text style={styles.geofenceType}>{g.tipo_evento === "ENTER" ? "Entrada" : "Salida"}</Text>
+                                                <Text style={styles.geofenceTime}>{formatDate(g.timestamp_evento)}</Text>
+                                            </View>
+                                        </View>
+                                    ))
+                                )}
+                            </View>
+
+                            <View style={appUi.card}>
+                                <Text style={appUi.sectionTitle}>📥 Exportar Reporte</Text>
+                                <Text style={styles.exportInfo}>
+                                    Descarga el reporte completo en formato PDF o Excel
+                                </Text>
+                                <View style={styles.exportRow}>
+                                    <TouchableOpacity
+                                        style={[styles.exportBtn, downloading && styles.btnDisabled]}
+                                        onPress={() => downloadFile("pdf")}
+                                        disabled={downloading}
+                                    >
+                                        <Text style={styles.exportBtnText}>📄 PDF</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.exportBtn, downloading && styles.btnDisabled]}
+                                        onPress={() => downloadFile("excel")}
+                                        disabled={downloading}
+                                    >
+                                        <Text style={styles.exportBtnText}>📊 Excel</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </>
+                    )}
                 </View>
-              </View>
-            )}
+            </ScrollView>
 
-            {loading && (
-              <ActivityIndicator
-                size="large"
-                color="#091636"
-                style={{ marginVertical: 20 }}
-              />
-            )}
-            {!loading &&
-              routeRows.length === 0 &&
-              alerts.length === 0 &&
-              stats === null &&
-              !error && (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyStateText}>
-                    Genera un reporte para ver los datos
-                  </Text>
+            <Modal visible={showMap} animationType="slide" onRequestClose={() => setShowMap(false)}>
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>🗺️ Ruta del Dispositivo</Text>
+                        <TouchableOpacity onPress={() => setShowMap(false)}>
+                            <Text style={styles.closeBtn}>✕ Cerrar</Text>
+                        </TouchableOpacity>
+                    </View>
+                    {route.length > 0 && Platform.OS === "web" && (
+                        <View style={styles.mapWrapper}>
+                            <iframe
+                                title="route-map"
+                                style={{ width: "100%", height: "100%", border: "none" }}
+                                srcDoc={generateMapHTML(route)}
+                            />
+                        </View>
+                    )}
+                    {route.length === 0 && (
+                        <Text style={styles.noMapData}>Sin datos de ruta para mostrar</Text>
+                    )}
                 </View>
-              )}
-          </View>
-        </ScrollView>
-      )}
-    </AppShell>
-  );
+            </Modal>
+        </AppShell>
+    );
 }
 
-// StyleSheet Definition
+function getAlertColor(tipo) {
+    const colors = {
+        BATTERY_LOW: "#fef3c7",
+        SIGNAL_LOST: "#dbeafe",
+        DISCONNECTED: "#fed7aa",
+        GEOFENCE_ENTER: "#d1fae5",
+        GEOFENCE_EXIT: "#fee2e2",
+    };
+    return colors[tipo] || "#f3f4f6";
+}
+
+function generateMapHTML(routeData) {
+    const lats = routeData.map((r) => r.latitud).filter(Boolean);
+    const lngs = routeData.map((r) => r.longitud).filter(Boolean);
+    if (lats.length === 0) return "";
+
+    const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+    const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+
+    return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          body { margin: 0; padding: 0; }
+          #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          const map = L.map('map').setView([${centerLat}, ${centerLng}], 13);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap',
+            maxZoom: 19,
+          }).addTo(map);
+
+          const routePoints = ${JSON.stringify(routeData.map((r) => [r.latitud, r.longitud]))};
+          
+          if (routePoints.length > 0) {
+            L.polyline(routePoints, {
+              color: '#3b82f6',
+              weight: 4,
+              opacity: 0.8,
+            }).addTo(map);
+
+            L.circleMarker(routePoints[0], {
+              radius: 8,
+              fillColor: '#10b981',
+              color: '#fff',
+              weight: 2,
+            }).bindPopup('Inicio').addTo(map);
+
+            L.circleMarker(routePoints[routePoints.length - 1], {
+              radius: 8,
+              fillColor: '#ef4444',
+              color: '#fff',
+              weight: 2,
+            }).bindPopup('Fin').addTo(map);
+          }
+        </script>
+      </body>
+    </html>`;
+}
+
 const styles = StyleSheet.create({
-  scrollContainer: { flex: 1 },
-  container: { gap: 10, paddingBottom: 30 },
+    scroll: { flex: 1 },
+    container: { gap: 16, padding: 16, paddingBottom: 40 },
 
-  // Access Denied
-  accessDeniedContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#fafafa",
-  },
-  accessDeniedIcon: {
-    fontSize: 80,
-    marginBottom: 20,
-  },
-  accessDeniedTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#091636",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-  accessDeniedMessage: {
-    fontSize: 14,
-    color: "#64748b",
-    textAlign: "center",
-    marginBottom: 15,
-  },
-  accessDeniedRole: {
-    fontSize: 12,
-    color: "#94a3b8",
-    fontStyle: "italic",
-  },
+    accessDenied: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        padding: 40,
+    },
+    accessIcon: { fontSize: 60, marginBottom: 16 },
+    accessTitle: { fontSize: 22, fontWeight: "bold", color: "#091636", marginBottom: 8 },
+    accessMessage: { fontSize: 14, color: "#64748b", textAlign: "center", marginBottom: 8 },
+    accessRole: { fontSize: 12, color: "#94a3b8", fontStyle: "italic" },
 
-  input: {
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 12,
-    padding: 10,
-    backgroundColor: "#fff",
-    marginBottom: 10,
-  },
-  row: { flexDirection: "row", gap: 10 },
-  primaryBtn: {
-    backgroundColor: "#091636",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  disabledBtn: { opacity: 0.5 },
-  primaryBtnText: { color: "#fff", fontWeight: "bold" },
-  errorText: { color: "#ef4444", marginTop: 10, fontSize: 12 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  cardTitle: { fontSize: 12, color: "#64748b" },
-  cardValue: { fontSize: 20, fontWeight: "bold", marginVertical: 4 },
-  cardLabel: { fontSize: 10, color: "#94a3b8" },
+    label: { fontSize: 12, color: "#64748b", marginBottom: 4, fontWeight: "500" },
+    input: {
+        borderWidth: 1,
+        borderColor: "#cbd5e1",
+        borderRadius: 10,
+        padding: 12,
+        backgroundColor: "#fff",
+        marginBottom: 12,
+    },
+    row: { flexDirection: "row", gap: 12 },
+    half: { flex: 1 },
 
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  toggleIcon: { fontSize: 12, color: "#091636" },
-  sectionInfo: {
-    fontSize: 11,
-    color: "#64748b",
-    marginBottom: 10,
-    fontStyle: "italic",
-  },
+    btnPrimary: {
+        backgroundColor: "#091636",
+        padding: 14,
+        borderRadius: 10,
+        alignItems: "center",
+    },
+    btnDisabled: { opacity: 0.5 },
+    btnText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
 
-  dataItem: {
-    flexDirection: "row",
-    gap: 10,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e2e8f0",
-  },
-  dataLabel: { color: "#3b82f6", fontWeight: "bold" },
-  dataText: { fontSize: 12, fontWeight: "500", color: "#1f2937" },
-  dataSubtext: { fontSize: 11, color: "#64748b", marginTop: 2 },
-  moreText: {
-    fontSize: 11,
-    color: "#94a3b8",
-    marginTop: 10,
-    fontStyle: "italic",
-    textAlign: "center",
-  },
+    error: { color: "#ef4444", fontSize: 12, marginTop: 8 },
 
-  alertItem: {
-    padding: 10,
-    marginVertical: 5,
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 10,
-  },
-  alertBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-  },
-  alertBadgeText: { fontWeight: "bold", fontSize: 12, color: "#fff" },
-  alertTitle: { fontSize: 12, fontWeight: "600", color: "#1f2937" },
-  alertTime: { fontSize: 10, color: "#64748b", marginTop: 2 },
-  alertDesc: { fontSize: 11, color: "#475569", marginTop: 4 },
-  alertBattery: { backgroundColor: "#fef3c7" },
-  alertSignal: { backgroundColor: "#dbeafe" },
-  alertDisconnected: { backgroundColor: "#fed7aa" },
-  alertDeviceOff: { backgroundColor: "#fecaca" },
-  alertGeofence: { backgroundColor: "#d1d5db" },
-  alertGeofenceExit: { backgroundColor: "#d1d5db" },
-  alertDefault: { backgroundColor: "#f3f4f6" },
+    summaryGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        gap: 10,
+        marginBottom: 16,
+    },
+    statCard: {
+        backgroundColor: "#fff",
+        borderRadius: 10,
+        padding: 12,
+        borderLeftWidth: 4,
+        minWidth: "30%",
+        flex: 1,
+    },
+    statValue: { fontSize: 18, fontWeight: "bold", color: "#091636" },
+    statLabel: { fontSize: 10, color: "#64748b" },
 
-  eventItem: {
-    padding: 10,
-    marginVertical: 5,
-    borderRadius: 8,
-    flexDirection: "row",
-    gap: 10,
-    borderLeftWidth: 3,
-  },
-  eventIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f0f9ff",
-  },
-  eventIconText: { fontSize: 18, fontWeight: "bold" },
-  eventTitle: { fontSize: 12, fontWeight: "600", color: "#1f2937" },
-  eventType: { fontSize: 10, color: "#64748b", marginTop: 2 },
-  eventTime: { fontSize: 10, color: "#94a3b8", marginTop: 2 },
-  enterEvent: { backgroundColor: "#ecfdf5", borderLeftColor: "#10b981" },
-  exitEvent: { backgroundColor: "#fef2f2", borderLeftColor: "#ef4444" },
+    sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+    mapLink: { color: "#3b82f6", fontWeight: "600", fontSize: 12 },
+    sectionInfo: { fontSize: 12, color: "#64748b", marginBottom: 12, fontStyle: "italic" },
+    more: { fontSize: 11, color: "#94a3b8", textAlign: "center", marginTop: 8, fontStyle: "italic" },
 
-  exportInfo: { fontSize: 11, color: "#64748b", marginBottom: 10 },
-  exportBtn: {
-    flex: 1,
-    backgroundColor: "#f3f4f6",
-    padding: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-  },
-  exportBtnText: { color: "#1f2937", fontWeight: "600", fontSize: 12 },
+    routeItem: {
+        borderBottomWidth: 1,
+        borderBottomColor: "#e2e8f0",
+        paddingVertical: 8,
+    },
+    routeTime: { fontSize: 11, color: "#1f2937", fontWeight: "500" },
+    routeCoord: { fontSize: 10, color: "#64748b" },
+    routeSpeed: { fontSize: 10, color: "#10b981" },
 
-  emptyState: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 40,
-  },
-  emptyStateText: { color: "#94a3b8", fontSize: 14 },
+    statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+    statBox: {
+        flex: 1,
+        backgroundColor: "#f8fafc",
+        borderRadius: 10,
+        padding: 12,
+        alignItems: "center",
+    },
+    statBoxValue: { fontSize: 16, fontWeight: "bold", color: "#091636" },
+    statBoxLabel: { fontSize: 9, color: "#64748b" },
 
-  // Map styles
-  mapContainer: { marginVertical: 15 },
-  mapWrapper: {
-    width: "100%",
-    height: 400,
-    borderRadius: 12,
-    overflow: "hidden",
-  },
+    subTitle: { fontSize: 13, fontWeight: "600", color: "#091636", marginBottom: 8, marginTop: 8 },
+    paradaItem: {
+        backgroundColor: "#fef3c7",
+        borderRadius: 8,
+        padding: 10,
+        marginBottom: 8,
+    },
+    paradaTime: { fontSize: 11, fontWeight: "500", color: "#1f2937" },
+    paradaDuration: { fontSize: 10, color: "#64748b" },
+    paradaLoc: { fontSize: 10, color: "#64748b", fontStyle: "italic" },
 
-  // Stats grid
-  statsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 15,
-  },
-  statCard: {
-    flex: 1,
-    minWidth: "45%",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  statIcon: { fontSize: 28, marginBottom: 8 },
-  statTitle: {
-    fontSize: 11,
-    color: "#64748b",
-    fontWeight: "500",
-    textAlign: "center",
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#091636",
-    marginVertical: 6,
-  },
-  statUnit: { fontSize: 10, color: "#94a3b8" },
+    emptyText: { fontSize: 12, color: "#94a3b8", textAlign: "center", padding: 20 },
 
-  // Section subtitle
-  sectionSubtitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#091636",
-    marginBottom: 10,
-  },
+    alertItem: { flexDirection: "row", gap: 10, padding: 10, borderRadius: 8, marginBottom: 8 },
+    alertBadge: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
+    alertBadgeText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+    alertInfo: { flex: 1 },
+    alertType: { fontSize: 12, fontWeight: "600", color: "#1f2937" },
+    alertTime: { fontSize: 10, color: "#64748b" },
+    alertDesc: { fontSize: 10, color: "#475569", marginTop: 2 },
 
-  // Parada items
-  paradaItem: {
-    backgroundColor: "#f8fafc",
-    padding: 12,
-    marginVertical: 6,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: "#f59e0b",
-  },
-  paradaHeader: { flexDirection: "row", gap: 8, marginBottom: 6 },
-  paradaIndex: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#f59e0b",
-    minWidth: 24,
-  },
-  paradaTime: { fontSize: 11, fontWeight: "500", color: "#1f2937" },
-  paradaDuration: { fontSize: 10, color: "#64748b", marginTop: 2 },
-  paradaLocation: { fontSize: 10, color: "#64748b", fontStyle: "italic" },
+    geofenceItem: {
+        flexDirection: "row",
+        gap: 12,
+        padding: 10,
+        borderRadius: 8,
+        marginBottom: 8,
+        borderLeftWidth: 3,
+    },
+    enterEvent: { backgroundColor: "#d1fae5", borderLeftColor: "#10b981" },
+    exitEvent: { backgroundColor: "#fee2e2", borderLeftColor: "#ef4444" },
+    geofenceIcon: { fontSize: 18, fontWeight: "bold" },
+    geofenceName: { fontSize: 12, fontWeight: "600", color: "#1f2937" },
+    geofenceType: { fontSize: 10, color: "#64748b" },
+    geofenceTime: { fontSize: 10, color: "#94a3b8" },
+
+    exportInfo: { fontSize: 11, color: "#64748b", marginBottom: 12 },
+    exportRow: { flexDirection: "row", gap: 12 },
+    exportBtn: {
+        flex: 1,
+        backgroundColor: "#f3f4f6",
+        padding: 14,
+        borderRadius: 10,
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#d1d5db",
+    },
+    exportBtnText: { color: "#1f2937", fontWeight: "600", fontSize: 14 },
+
+    modalContainer: { flex: 1, backgroundColor: "#fff" },
+    modalHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "#e2e8f0",
+    },
+    modalTitle: { fontSize: 18, fontWeight: "bold", color: "#091636" },
+    closeBtn: { color: "#ef4444", fontWeight: "600" },
+    mapWrapper: { flex: 1 },
+    noMapData: { flex: 1, textAlign: "center", marginTop: 40, color: "#64748b" },
 });
