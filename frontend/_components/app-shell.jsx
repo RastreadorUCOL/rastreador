@@ -16,7 +16,8 @@ const NAV_ITEMS = [
 export default function AppShell({ title, subtitle, children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = getAuthContext();
+  const { user, role } = getAuthContext();
+  const normalizedRole = String(role || user?.rol || "").toUpperCase();
   const token = getAuthToken();
   const { width: viewportWidth } = useWindowDimensions();
 
@@ -55,6 +56,13 @@ export default function AppShell({ title, subtitle, children }) {
             <ScrollView style={styles.navScroll}>
               {NAV_ITEMS.map((item) => {
                 const active = pathname === item.href;
+                const canView =
+                  normalizedRole === "ADMIN" ||
+                  (normalizedRole === "SUPERVISOR" && ["/dashboard", "/reports", "/alerts", "/profile"].includes(item.href)) ||
+                  (normalizedRole === "USER" && ["/dashboard", "/profile"].includes(item.href));
+
+                if (!canView) return null;
+
                 return (
                   <TouchableOpacity 
                     key={item.href} 

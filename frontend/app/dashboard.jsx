@@ -9,12 +9,28 @@ import { getAuthToken, getAuthContext } from "../lib/auth-session";
 import { api } from "../lib/fetch";
 import { useLocationTracker } from "../hooks/useLocationTracker";
 
-const quickLinks = [
-  { href: "/alerts", title: "Alertas", description: "Eventos criticos" },
-  { href: "/users", title: "Usuarios", description: "Gestion de personal" },
-  { href: "/geofences", title: "Geocercas", description: "Zonas y eventos" },
-  { href: "/reports", title: "Reportes", description: "Rutas y exportacion" },
-];
+const getQuickLinksByRole = (role) => {
+  if (role === "ADMIN") {
+    return [
+      { href: "/alerts", title: "Alertas", description: "Eventos criticos" },
+      { href: "/users", title: "Usuarios", description: "Gestion de personal" },
+      { href: "/geofences", title: "Geocercas", description: "Zonas y eventos" },
+      { href: "/reports", title: "Reportes", description: "Rutas y exportacion" },
+    ];
+  }
+
+  if (role === "SUPERVISOR") {
+    return [
+      { href: "/alerts", title: "Alertas", description: "Eventos criticos" },
+      { href: "/reports", title: "Reportes", description: "Rutas y exportacion" },
+    ];
+  }
+
+  // USER (rastreado)
+  return [
+    { href: "/alerts", title: "Alertas", description: "Tus eventos" },
+  ];
+};
 
 function formatTime(isoString) {
   if (!isoString) return "--:--";
@@ -46,7 +62,13 @@ export default function Dashboard() {
   );
   const isAdminOrSup = normalizedRole === "ADMIN" || normalizedRole === "SUPERVISOR";
 
+  const quickLinks = useMemo(
+  () => getQuickLinksByRole(normalizedRole),
+  [normalizedRole]
+);
+
   useEffect(() => {
+    
     const loadDashboardData = async () => {
       setLoading(true);
       setError("");
@@ -93,7 +115,9 @@ export default function Dashboard() {
       <View style={styles.statsGrid}>
         <StatCard label="Batería" value={`${currentMetrics.battery}%`} sub={currentMetrics.network} />
         <StatCard label="Velocidad" value={`${currentMetrics.speed}`} sub="km/h" />
-        <StatCard label="Geocercas" value={geofences.length} sub="Zonas activas" />
+        {isAdminOrSup && (
+          <StatCard label="Geocercas" value={geofences.length} sub="Zonas activas" />
+        )}
         <StatCard label="Sincro" value={formatTime(lastSync)} sub="Última vez" />
       </View>
 
@@ -130,23 +154,27 @@ export default function Dashboard() {
         </View>
       )}
 
-      {/* RECENT ALERTS */}
-      <View style={styles.alertHeader}>
-        <Text style={appUi.sectionTitle}>Alertas Recientes</Text>
-      </View>
-      
-      {recentAlerts.length === 0 && !loading ? (
-        <View style={appUi.card}>
-          <Text style={styles.emptyText}>No hay alertas recientes.</Text>
-        </View>
-      ) : (
-        recentAlerts.map((item, idx) => (
-          <AlertCard
-            key={idx}
-            title={item?.tipo_alerta || "Alerta"}
-            description={mapAlertDescription(item)}
-          />
-        ))
+      {isAdminOrSup && (
+        <>
+          {/* RECENT ALERTS */}
+          <View style={styles.alertHeader}>
+            <Text style={appUi.sectionTitle}>Alertas Recientes</Text>
+          </View>
+          
+          {recentAlerts.length === 0 && !loading ? (
+            <View style={appUi.card}>
+              <Text style={styles.emptyText}>No hay alertas recientes.</Text>
+            </View>
+          ) : (
+            recentAlerts.map((item, idx) => (
+              <AlertCard
+                key={idx}
+                title={item?.tipo_alerta || "Alerta"}
+                description={mapAlertDescription(item)}
+              />
+            ))
+          )}
+        </>
       )}
 
       {/* QUICK LINKS */}
