@@ -1,5 +1,6 @@
 const DEFAULT_API_BASE_URL = "http://localhost:3000/api";
-const RAW_API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
+const RAW_API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_BASE_URL;
 const API_BASE_URL = RAW_API_BASE_URL.replace(/\/+$/, "");
 
 function isAbsoluteUrl(path) {
@@ -98,7 +99,7 @@ export async function apiRequest(
     signal,
     errorMessage,
     ...rest
-  } = {}
+  } = {},
 ) {
   const url = `${withBaseUrl(path)}${buildQueryString(query)}`;
   const requestHeaders = { ...headers };
@@ -127,18 +128,22 @@ export async function apiRequest(
     response = await fetch(url, requestInit);
   } catch (error) {
     throw new ApiError(
-      errorMessage || "No se pudo conectar con el servidor. Revisa la URL del API.",
-      { cause: error }
+      errorMessage ||
+        "No se pudo conectar con el servidor. Revisa la URL del API.",
+      { cause: error },
     );
   }
 
   const responseData = await parseResponseBody(response);
 
   if (!response.ok) {
-    throw new ApiError(extractErrorMessage(responseData, response.status, errorMessage), {
-      status: response.status,
-      data: responseData,
-    });
+    throw new ApiError(
+      extractErrorMessage(responseData, response.status, errorMessage),
+      {
+        status: response.status,
+        data: responseData,
+      },
+    );
   }
 
   return responseData;
@@ -147,10 +152,15 @@ export async function apiRequest(
 export const api = {
   request: apiRequest,
   get: (path, options = {}) => apiRequest(path, { ...options, method: "GET" }),
-  post: (path, data, options = {}) => apiRequest(path, { ...options, method: "POST", data }),
-  put: (path, data, options = {}) => apiRequest(path, { ...options, method: "PUT", data }),
-  patch: (path, data, options = {}) => apiRequest(path, { ...options, method: "PATCH", data }),
-  delete: (path, options = {}) => apiRequest(path, { ...options, method: "DELETE" }),
+  post: (path, data, options = {}) =>
+    apiRequest(path, { ...options, method: "POST", data }),
+  put: (path, data, options = {}) =>
+    apiRequest(path, { ...options, method: "PUT", data }),
+  patch: (path, data, options = {}) =>
+    apiRequest(path, { ...options, method: "PATCH", data }),
+  delete: (path, options = {}) =>
+    apiRequest(path, { ...options, method: "DELETE" }),
 };
 
 export { API_BASE_URL };
+

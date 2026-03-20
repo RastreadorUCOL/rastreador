@@ -43,6 +43,8 @@ export const API_ROUTES = {
   reports: {
     route: (userId) => absolute(`/reports/route/${userId}`),
     stats: (userId) => absolute(`/reports/stats/${userId}`),
+    alerts: (userId) => absolute(`/reports/alerts/${userId}`),
+    geofenceEvents: (userId) => absolute(`/reports/geofence-events/${userId}`),
     exportPdf: (userId) => absolute(`/reports/export/pdf/${userId}`),
     exportExcel: (userId) => absolute(`/reports/export/excel/${userId}`),
   },
