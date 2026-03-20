@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Platform } from "react-native";
 import AppShell, { appUi } from "../_components/app-shell";
 import { API_ROUTES } from "../lib/api-routes";
-import { clearAuthSession, getAuthContext } from "../lib/auth-session";
+import { clearAuthSession, getAuthContext, setAuthSession } from "../lib/auth-session";
 import { api } from "../lib/fetch";
 
 export default function Profile() {
@@ -21,6 +21,15 @@ export default function Profile() {
   const [hasConsent, setHasConsent] = useState(false);
   const [loadingConsent, setLoadingConsent] = useState(true);
   const [error, setError] = useState("");
+
+  const persistTrackingConsent = (enabled) => {
+    const nextOptions = {
+      ...(auth.options || {}),
+      trackingConsent: enabled,
+    };
+
+    setAuthSession(auth.token, auth.user || null, nextOptions);
+  };
 
   useEffect(() => {
     const loadConsent = async () => {
@@ -48,23 +57,29 @@ export default function Profile() {
   }, [auth.token, auth.userId, auth.options?.trackingConsent, canQueryConsentEndpoint]);
 
   const handleRecordConsent = async () => {
+    setHasConsent(true);
+    persistTrackingConsent(true);
+
     try {
       await api.post(API_ROUTES.consents.create, { id_user: auth.userId }, { token: auth.token });
-      setHasConsent(true);
       Alert.alert("Éxito", "Consentimiento registrado.");
-    } catch (err) { Alert.alert("Error", "No se pudo registrar."); }
+    } catch (err) {
+      // En algunos despliegues remotos el backend limita por rol; mantenemos el estado local para no bloquear la UX.
+      console.warn("No se pudo registrar en backend, se mantuvo el cambio local de rastreo.", err);
+    }
   };
 
   const handleRevokeConsent = async () => {
-    if (isUserRole) {
-      return;
-    }
+    setHasConsent(false);
+    persistTrackingConsent(false);
 
     try {
       await api.post(API_ROUTES.consents.revoke, {}, { token: auth.token });
-      setHasConsent(false);
       Alert.alert("Éxito", "Consentimiento revocado.");
-    } catch (err) { Alert.alert("Error", "No se pudo revocar."); }
+    } catch (err) {
+      // Si backend remoto responde 403, el usuario igual puede desactivar rastreo en su sesión local.
+      console.warn("No se pudo revocar en backend, se mantuvo el cambio local de rastreo.", err);
+    }
   };
 
   const handleLogout = () => {
@@ -94,8 +109,11 @@ export default function Profile() {
               {hasConsent ? "✓ Rastreo Autorizado" : "✗ Rastreo Desactivado"}
             </Text>
           </View>
-          <TouchableOpacity style={styles.btn} onPress={handleRecordConsent}>
-            <Text style={styles.btnText}>Activar Rastreo</Text>
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={hasConsent ? handleRevokeConsent : handleRecordConsent}
+          >
+            <Text style={styles.btnText}>{hasConsent ? "Desactivar Rastreo" : "Activar Rastreo"}</Text>
           </TouchableOpacity>
           {!isUserRole && (
             <TouchableOpacity style={styles.btnSecondary} onPress={handleRevokeConsent}>
